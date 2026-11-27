@@ -11,9 +11,9 @@ if errorlevel 1 (
   exit /b 1
 )
 
-for /f "delims=" %%v in ('node -p "process.versions.node.split('.')[0]"') do set "NODE_MAJOR=%%v"
-if %NODE_MAJOR% LSS 22 (
-  echo Node.js 22 or newer is required, but version %NODE_MAJOR% was found.
+node -e "const [major, minor] = process.versions.node.split('.').map(Number); process.exit(major > 22 || major === 22 && minor >= 12 ? 0 : 1)"
+if errorlevel 1 (
+  echo Node.js 22.12 or newer is required.
   echo Install Node.js 24 LTS from https://nodejs.org and try again.
   pause
   exit /b 1
@@ -28,7 +28,7 @@ if not exist ".env" (
 
 if not exist "node_modules\discord.js" (
   echo Installing dependencies...
-  call npm install --no-audit --no-fund
+  call npm ci --omit=dev --no-audit --no-fund
   if errorlevel 1 (
     echo Dependency installation failed.
     pause

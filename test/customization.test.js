@@ -148,6 +148,8 @@ test("custom conversion and QR require supported definitions, and configured cho
   await command.execute(interaction);
   assert.match(interaction.calls[1].payload.embeds[0].toJSON().fields[0].value, /0\.1005 ETH/);
   assert.throws(() => load(t, { paymentMethods: [{ ...ethProfile, network: "Other" }] }), /supported asset/);
+  assert.throws(() => load(t, { paymentMethods: [{ ...ethProfile, addressFormat: "btc", priceId: undefined }] }),
+    /does not match the named network/);
   assert.throws(() => load(t, { paymentMethods: [{ ...ethProfile, recipient: "InvalidAddress" }] }), /selected address format/);
   assert.throws(() => load(t, { paymentMethods: [{ ...customCash, qr: true }] }), /requires an address format/);
   assert.throws(() => load(t, { paymentMethods: [{ ...customCash, id: "BTC" }] }), /avoid built-in IDs/);

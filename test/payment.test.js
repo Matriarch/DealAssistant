@@ -47,6 +47,7 @@ test("formatCrypto refuses amounts that must never be displayed", () => {
   assert.equal(formatCrypto(0, 8), null);
   assert.equal(formatCrypto(-1, 8), null);
   assert.equal(formatCrypto("1", 8), null);
+  assert.equal(formatCrypto(1e30, 8), null);
 });
 
 test("isValidAmount rejects non-finite, zero, negative and oversized input", () => {

@@ -46,6 +46,13 @@ test("obsolete method selections and unsupported amount or QR options are reject
   }
 });
 
+test("the payment hint uses the selected method instead of an unconfigured currency", async () => {
+  const command = build({ LTC_ADDRESS: ADDRESSES.LTC_ADDRESS }).get("pay");
+  const interaction = createInteraction({ strings: { currency: "LTC" } });
+  await command.execute(interaction);
+  assert.match(interaction.calls[0].payload.embeds[0].toJSON().description, /currency:LTC/);
+});
+
 test("the unified payment attachment decodes to the exact configured address without an amount", async () => {
   const { decodeQR } = await import("qr/decode.js");
   const interaction = createInteraction({

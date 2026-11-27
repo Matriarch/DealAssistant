@@ -29,12 +29,13 @@ module.exports = (config, deps = {}) => {
   return {
     data,
     async execute(interaction) {
-      const method = methods.get(interaction.options.getString("currency"));
+      const methodId = interaction.options.getString("currency");
+      const method = methods.get(methodId);
       if (!method) {
         return replyEphemeral(interaction, "That payment method is unavailable. Select a configured method.");
       }
       return sendPayment(interaction, {
-        commandName: "pay", method, address: method.address, config, deps
+        commandName: "pay", methodId, method, address: method.address, config, deps
       });
     }
   };

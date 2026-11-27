@@ -33,7 +33,7 @@ function formatUsd(value) {
  * instead of printing something misleading.
  */
 function formatCrypto(value, decimals) {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+  if (!Number.isFinite(value) || value <= 0 || value > Number.MAX_SAFE_INTEGER) {
     return null;
   }
 
@@ -54,7 +54,7 @@ function isValidAmount(value) {
 }
 
 function describePayment({
-  commandName, method, address, amountUsd, fiat = "USD", price, retrievedAt, rateError, includeQr
+  commandName, methodId, method, address, amountUsd, fiat = "USD", price, retrievedAt, rateError, includeQr
 }) {
   const spec = { title: escapeMarkdown(method.title), fields: [] };
 
@@ -77,7 +77,7 @@ function describePayment({
       spec.fields.push({ name: "Amount", value: lines.join("\n") });
     }
   } else if (method.priceId) {
-    const example = commandName === "pay" ? "/pay currency:BTC amount:200" : `/${commandName} amount:200`;
+    const example = commandName === "pay" ? `/pay currency:${methodId} amount:200` : `/${commandName} amount:200`;
     spec.description = `_Add \`amount\` to convert from USD, e.g. \`${example}\`._`;
   }
 
@@ -121,7 +121,7 @@ function addQrOption(data) {
   );
 }
 
-async function sendPayment(interaction, { commandName, method, address, config, deps = {} }) {
+async function sendPayment(interaction, { commandName, methodId, method, address, config, deps = {} }) {
   const amountUsd = interaction.options.getNumber("amount") ?? undefined;
   const fiat = commandName === "pay" ? interaction.options.getString("fiat") ?? "USD" : "USD";
   const wantsQr = config.paymentQrEnabled && interaction.options.getBoolean("qr") === true;
@@ -170,7 +170,7 @@ async function sendPayment(interaction, { commandName, method, address, config, 
 
   const payload = {
     embeds: [buildPaymentEmbed({
-      commandName, method, address, amountUsd, fiat, price, retrievedAt, rateError, config, includeQr: files.length > 0
+      commandName, methodId, method, address, amountUsd, fiat, price, retrievedAt, rateError, config, includeQr: files.length > 0
     })],
     allowedMentions: { parse: [] }
   };

@@ -7,6 +7,14 @@ const { validateAddress } = require("./utils/address");
 const ADDRESS_FORMATS = ["btc", "ltc", "eth", "sol"];
 const BUILT_IN_IDS = ["BTC", "LTC", "ETH", "SOL", "USDC-ETH", "USDC-SOL", "CASHAPP"];
 const MAX_PAYMENT_CHOICES = 25;
+const NETWORK_ADDRESS_FORMATS = new Map([
+  ["Bitcoin", "btc"],
+  ["Litecoin", "ltc"],
+  ["Ethereum", "eth"],
+  ["Solana", "sol"],
+  ["Ethereum (ERC-20)", "eth"],
+  ["Solana (SPL)", "sol"]
+]);
 
 function addCustomPaymentMethods(methods, entries, problems) {
   if (entries === undefined) {
@@ -39,18 +47,19 @@ function addCustomPaymentMethods(methods, entries, problems) {
     if (typeof recipient !== "string" || !/^[A-Za-z0-9$+@][A-Za-z0-9._:@+$-]{0,127}$/.test(recipient)) {
       problems.push(`${at}.recipient must be a public address or identifier of up to 128 characters without spaces.`);
     }
+    const networkFormat = NETWORK_ADDRESS_FORMATS.get(network);
     if (addressFormat !== undefined) {
       if (!ADDRESS_FORMATS.includes(addressFormat)) {
         problems.push(`${at}.addressFormat must be btc, ltc, eth, or sol.`);
+      } else if (networkFormat && addressFormat !== networkFormat) {
+        problems.push(`${at}.addressFormat does not match the named network.`);
       } else if (!validateAddress(addressFormat, recipient).valid) {
         problems.push(`${at}.recipient does not match the selected address format.`);
       }
     }
     const knownAsset = Object.values(PAYMENT_METHODS).find((method) => method.symbol === symbol &&
       method.network === network && method.priceId === priceId);
-    const requiredFormat = { Bitcoin: "btc", Litecoin: "ltc", Ethereum: "eth", Solana: "sol",
-      "Ethereum (ERC-20)": "eth", "Solana (SPL)": "sol" };
-    if (priceId !== undefined && (!knownAsset || addressFormat !== requiredFormat[network])) {
+    if (priceId !== undefined && (!knownAsset || addressFormat !== networkFormat)) {
       problems.push(`${at}.priceId requires a supported asset, network, and matching address format.`);
     }
     if (decimals !== undefined && (!Number.isInteger(decimals) || decimals < 0 || decimals > (knownAsset?.decimals ?? 8))) {

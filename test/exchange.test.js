@@ -2,6 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { setTimeout: delay } = require("node:timers/promises");
 const { createPriceCommand, createConvertCommand } = require("../src/commands/exchange");
 const { createInteractionHandler } = require("../src/router");
 const { createPriceService } = require("../src/utils/prices");
@@ -29,6 +30,36 @@ test("parallel fiat lookups share one request and retain the original retrieval 
   await assert.rejects(() => service.getPrice("bitcoin", "CAD"), /no usable rate/);
   await assert.rejects(() => service.getPrice("bitcoin", "XYZ"), /unsupported/);
   assert.equal(calls, 1);
+});
+
+test("clearing the rate cache during a request preserves the newer in-flight lookup", async () => {
+  const requests = [];
+  const service = createPriceService({
+    fetchImpl: () => new Promise((resolve) => requests.push((usd) =>
+      resolve({ ok: true, json: async () => ({ bitcoin: { usd } }) })))
+  });
+  const original = service.getPrice("bitcoin");
+  service.clearCache();
+  const replacement = service.getPrice("bitcoin");
+  requests[0](50_000);
+  assert.equal((await original).rate, 50_000);
+  const another = service.getPrice("bitcoin");
+  requests[1](60_000);
+  assert.equal((await replacement).rate, 60_000);
+  assert.equal((await another).rate, 60_000);
+  assert.equal((await service.getPrice("bitcoin")).rate, 60_000);
+  assert.equal(requests.length, 2);
+});
+
+test("the price service aborts a slow request", async () => {
+  const service = createPriceService({
+    timeoutMs: 5,
+    fetchImpl: async (_url, { signal }) => {
+      await delay(1000, undefined, { signal });
+      assert.fail("Expected an aborted request");
+    }
+  });
+  await assert.rejects(() => service.getPrice("bitcoin"), /aborted/);
 });
 
 test("price responds privately with the observed USDC price, currency and retrieval time", async () => {

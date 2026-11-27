@@ -41,7 +41,7 @@ when a lookup fails. Market estimates can change before payment.
 
 ## Requirements
 
-- Node.js 22 or newer (Node.js 24 LTS recommended)
+- Node.js 22.12 or newer (use the latest Node.js 24 LTS patch when possible)
 - Your own Discord application, created below
 - No database, no Docker, no privileged intents
 
@@ -244,6 +244,9 @@ npm start
 Global command updates can take up to an hour to appear in Discord. If a command is
 missing, re-run `register`, wait, and restart your Discord client.
 
+After updating DealAssistant, run `npm ci` to install the locked dependencies
+and `npm run register` to update the commands before restarting.
+
 ### Windows
 
 After `npm install` and a filled-in `.env`, double-click `start-dealassistant.bat`.
@@ -362,8 +365,42 @@ timeouts and fallbacks, embed limits, owner-only authorisation, log redaction, a
 configuration failures. GitHub Actions runs it on Node.js 22 and 24 and audits
 production dependencies on every push and pull request.
 
-Live Discord integration is not part of the test suite; it requires a separate
-application and token.
+### Live Discord smoke test
+
+Use a separate Discord application with its own test token and application ID.
+Enable User Install with the `applications.commands` scope, set your test
+account as `DISCORD_OWNER_ID`, and use public receiving addresses designated for
+testing. A second Discord account is needed to verify the owner check. Run
+`npm run register` followed by `npm start` with that configuration.
+
+1. Use the owner account to try a payment shortcut and `/pay` in a server, a
+   direct message, and a group DM. Check which replies other participants can see.
+2. Select each configured method and verify that the address matches its settings.
+   Request `qr:true`, scan the image, and compare the scanned address with the
+   selectable text. This check requires no transfers.
+3. Try an amount on a payment command, a USDC price, and a conversion in each
+   direction. Check that the displayed rate and retrieval time accompany the estimate.
+4. Register a custom command and try it with and without a parameter. From the
+   second account, try a payment, a rate command, and the custom command. Verify
+   that all three receive only the private denial.
+
+### Release archives
+
+Run the tests, production dependency audit, and secret scan before packaging a
+release. Build the archive from the tested Git commit so the download contains
+only tracked files. For a release candidate, use its version in the archive name
+and mark any GitHub release as a pre-release until the live checks above pass.
+
+```bash
+mkdir -p release
+git archive --format=zip --prefix=DealAssistant-1.1.0-rc.1/ \
+  -o release/DealAssistant-1.1.0-rc.1.zip HEAD
+cd release
+sha256sum DealAssistant-1.1.0-rc.1.zip > SHA256SUMS.txt
+```
+
+On Windows use `Get-FileHash -Algorithm SHA256` to verify the archive against the
+published checksum.
 
 ## License
 

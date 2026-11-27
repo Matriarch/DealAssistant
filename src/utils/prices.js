@@ -32,7 +32,7 @@ function createPriceService(options = {}) {
         headers: { accept: "application/json" }
       });
     } catch (error) {
-      throw new PriceLookupError(`price request failed: ${error.message}`);
+      throw new PriceLookupError(`price request failed: ${error?.message ?? "network error"}`);
     }
 
     if (response.status === 429) {
