@@ -7,9 +7,11 @@ const { PAYMENT_METHODS } = require("../src/coins");
 const {
   PRICE_CACHE_TTL_MS,
   PriceLookupError,
+  createPriceService
+} = require("../src/utils/prices");
+const {
   buildPaymentEmbed,
   createPaymentCommand,
-  createPriceService,
   formatCrypto,
   formatUsd,
   isValidAmount
@@ -187,26 +189,27 @@ test("payment embed converts an amount using the supplied rate", () => {
   assert.match(amountField.value, /Estimate only/);
 });
 
-test("stablecoin embeds disclose the assumed dollar parity", () => {
+test("stablecoin embeds use the live rate rather than assuming dollar parity", () => {
   const embed = buildPaymentEmbed({
     commandName: "usdceth",
     method: PAYMENT_METHODS.usdceth,
     address: "0x0000000000000000000000000000000000000000",
     amountUsd: 200,
+    price: 0.98,
     config: CONFIG
   }).toJSON();
 
   const amountField = embed.fields.find((field) => field.name === "Amount");
-  assert.match(amountField.value, /200 USDC/);
-  assert.match(amountField.value, /Assumes 1 USDC = \$1\.00/);
+  assert.match(amountField.value, /204\.081633 USDC/);
+  assert.match(embed.fields.find((field) => field.name === "Exchange rate").value, /0\.98 USD/);
 });
 
 test("an amount conversion acknowledges before the price request", async () => {
   const command = createPaymentCommand("btc", CONFIG, {
     priceService: {
-      getUsdPrice: async (priceId) => {
+      getPrice: async () => {
         deferredWhenPriceWasRequested = interaction.deferred;
-        return 50000;
+        return { rate: 50000, retrievedAt: 1000 };
       }
     }
   });
@@ -225,7 +228,7 @@ test("an amount conversion acknowledges before the price request", async () => {
 test("a timed out price lookup still returns the address", async () => {
   const command = createPaymentCommand("btc", CONFIG, {
     priceService: {
-      getUsdPrice: async () => {
+      getPrice: async () => {
         throw new PriceLookupError("price request failed: The operation was aborted");
       }
     }
@@ -244,7 +247,7 @@ test("a timed out price lookup still returns the address", async () => {
 
 test("payment command refuses an out of range amount without deferring", async () => {
   const command = createPaymentCommand("btc", CONFIG, {
-    priceService: { getUsdPrice: async () => 50000 }
+    priceService: { getPrice: async () => ({ rate: 50000, retrievedAt: 1000 }) }
   });
   const interaction = createInteraction({ amount: 0 });
 
@@ -257,7 +260,7 @@ test("payment command refuses an out of range amount without deferring", async (
 
 test("payment command reports a missing address instead of failing", async () => {
   const command = createPaymentCommand("btc", { ...CONFIG, addresses: {} }, {
-    priceService: { getUsdPrice: async () => 50000 }
+    priceService: { getPrice: async () => ({ rate: 50000, retrievedAt: 1000 }) }
   });
   const interaction = createInteraction({ amount: null });
 
@@ -268,7 +271,7 @@ test("payment command reports a missing address instead of failing", async () =>
 
 test("payment command replies with a converted amount", async () => {
   const command = createPaymentCommand("btc", CONFIG, {
-    priceService: { getUsdPrice: async () => 50000 }
+    priceService: { getPrice: async () => ({ rate: 50000, retrievedAt: 1000 }) }
   });
   const interaction = createInteraction({ amount: 200 });
 

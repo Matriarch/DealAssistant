@@ -1,6 +1,7 @@
 "use strict";
 
 const { defineCommand } = require("../utils/command");
+const { FIAT_CURRENCIES } = require("../coins");
 const { addPaymentAmountOption, addQrOption, sendPayment } = require("../utils/payment");
 const { replyEphemeral } = require("../utils/replies");
 
@@ -14,8 +15,12 @@ module.exports = (config, deps = {}) => {
       .setRequired(true)
       .addChoices(...choices));
 
-  if ([...methods.values()].some((method) => method.priceId || method.usdPeg)) {
+  if ([...methods.values()].some((method) => method.priceId)) {
     addPaymentAmountOption(data);
+    data.addStringOption((option) => option
+      .setName("fiat")
+      .setDescription("Currency for the deal amount (defaults to USD).")
+      .addChoices(...FIAT_CURRENCIES.map((value) => ({ name: value, value }))));
   }
   if (config.paymentQrEnabled && [...methods.values()].some((method) => method.supportsQr)) {
     addQrOption(data);

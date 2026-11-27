@@ -16,6 +16,8 @@ confirm a payment.
 | Command | Description |
 | --- | --- |
 | `/pay currency:BTC [amount] [qr]` | Share details for one of your configured payment methods |
+| `/price currency:BTC [fiat]` | Check a cryptocurrency price privately |
+| `/convert amount:200 from:USD to:BTC` | Estimate a fiat-to-crypto or crypto-to-fiat conversion privately |
 | `/btc [amount]` | Bitcoin address, optionally converted from a USD amount |
 | `/ltc [amount]` | Litecoin address, optionally converted |
 | `/eth [amount]` | Ethereum address, optionally converted |
@@ -37,12 +39,13 @@ cryptocurrency commands remain available as shortcuts. Set
 argument to cryptocurrency payments. The image is generated locally and encodes
 the same address shown in the response. Amounts stay outside the QR code.
 
-`amount` is a USD figure. `/btc amount:200` shows the address, the approximate BTC
-amount and the rate used. Rates come from the CoinGecko public API, are cached for
-60 seconds, and simultaneous requests for the same currency share one call. If the
-lookup fails the command still returns the address and says the live rate was
-unavailable. The conversion is an estimate, not a quote, and no command claims to
-verify or confirm a payment.
+The payment shortcuts take amounts in USD. `/pay currency:BTC amount:200 fiat:EUR`
+estimates the payment for a EUR deal. `/pay`, `/price` and `/convert` support USD,
+EUR, GBP and CAD. For example, `/convert amount:0.5 from:ETH to:USD` estimates the
+USD value of 0.5 ETH. Rates include USDC market prices from CoinGecko and show
+when the app retrieved them. The app caches rates for 60 seconds and shares
+concurrent lookups for the same asset. Payment responses still show the address
+when a lookup fails. Market estimates can change before payment.
 
 ## Requirements
 

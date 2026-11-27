@@ -13,8 +13,7 @@ const PAYMENT_METHODS = {
     network: "Bitcoin",
     envKey: "BTC_ADDRESS",
     priceId: "bitcoin",
-    decimals: 8,
-    pricePrecision: 2
+    decimals: 8
   },
   ltc: {
     symbol: "LTC",
@@ -22,8 +21,7 @@ const PAYMENT_METHODS = {
     network: "Litecoin",
     envKey: "LTC_ADDRESS",
     priceId: "litecoin",
-    decimals: 8,
-    pricePrecision: 2
+    decimals: 8
   },
   eth: {
     symbol: "ETH",
@@ -31,8 +29,7 @@ const PAYMENT_METHODS = {
     network: "Ethereum",
     envKey: "ETH_ADDRESS",
     priceId: "ethereum",
-    decimals: 6,
-    pricePrecision: 2
+    decimals: 6
   },
   sol: {
     symbol: "SOL",
@@ -40,36 +37,39 @@ const PAYMENT_METHODS = {
     network: "Solana",
     envKey: "SOL_ADDRESS",
     priceId: "solana",
-    decimals: 6,
-    pricePrecision: 2
+    decimals: 6
   },
   usdceth: {
     symbol: "USDC",
     title: "USDC on Ethereum",
     network: "Ethereum (ERC-20)",
     envKey: "USDC_ETH_ADDRESS",
-    decimals: 2,
-    usdPeg: true
+    decimals: 6,
+    priceId: "usd-coin"
   },
   usdcsol: {
     symbol: "USDC",
     title: "USDC on Solana",
     network: "Solana (SPL)",
     envKey: "USDC_SOL_ADDRESS",
-    decimals: 2,
-    usdPeg: true
+    decimals: 6,
+    priceId: "usd-coin"
   }
 };
 
 const PAYMENT_COMMAND_NAMES = Object.keys(PAYMENT_METHODS);
 
-const NON_PAYMENT_COMMANDS = ["cashapp", "info", "vouch", "middleman", "pay", "help"];
+const NON_PAYMENT_COMMANDS = ["cashapp", "info", "vouch", "middleman", "pay", "price", "convert", "help"];
 
 const COMMAND_NAMES = [...PAYMENT_COMMAND_NAMES, ...NON_PAYMENT_COMMANDS];
+const FIAT_CURRENCIES = ["USD", "EUR", "GBP", "CAD"];
+const PRICED_COINS = new Map(Object.values(PAYMENT_METHODS).map((method) => [method.symbol, method]));
 
 module.exports = {
   PAYMENT_METHODS,
   PAYMENT_COMMAND_NAMES,
   NON_PAYMENT_COMMANDS,
-  COMMAND_NAMES
+  COMMAND_NAMES,
+  FIAT_CURRENCIES,
+  PRICED_COINS
 };

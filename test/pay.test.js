@@ -27,7 +27,7 @@ test("/pay is registered only with configured methods and lists distinct network
   const [currency, ...options] = commands.get("pay").data.toJSON().options;
   assert.deepEqual(currency.choices.map(({ value }) => value), ["BTC", "USDC-SOL"]);
   assert.equal(currency.required, true);
-  assert.deepEqual(options.map(({ name }) => name), ["amount"]);
+  assert.deepEqual(options.map(({ name }) => name), ["amount", "fiat"]);
 });
 
 test("obsolete method selections and unsupported amount or QR options are rejected", async () => {
@@ -52,7 +52,7 @@ test("the unified payment attachment decodes to the exact configured address wit
     strings: { currency: "ETH" }, amount: 25, booleans: { qr: true }
   });
   const commands = build({ ETH_ADDRESS: ADDRESSES.ETH_ADDRESS, PAYMENT_QR_ENABLED: "true" }, {
-    priceService: { getUsdPrice: async () => 2500 }
+    priceService: { getPrice: async () => ({ rate: 2500, retrievedAt: 1000 }) }
   });
   await commands.get("pay").execute(interaction);
 

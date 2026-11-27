@@ -1,6 +1,7 @@
 "use strict";
 
 const { COMMAND_NAMES } = require("../coins");
+const { createPriceCommand, createConvertCommand } = require("./exchange");
 
 const factories = {
   btc: require("./btc"),
@@ -14,6 +15,8 @@ const factories = {
   vouch: require("./vouch"),
   middleman: require("./middleman"),
   pay: require("./pay"),
+  price: createPriceCommand,
+  convert: createConvertCommand,
   help: require("./help")
 };
 
