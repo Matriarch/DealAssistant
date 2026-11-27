@@ -3,7 +3,14 @@
 const { MessageFlags } = require("discord.js");
 
 const { defineCommand } = require("../utils/command");
-const { createEmbed } = require("../utils/embeds");
+const { buildEmbed } = require("../utils/embeds");
+
+function describeCashApp(config) {
+  return {
+    title: "Cash App",
+    description: `\`${config.cashAppTag}\`\n\n_Verify the tag before sending._`
+  };
+}
 
 module.exports = (config) => ({
   data: defineCommand("cashapp", "Show the configured Cash App tag."),
@@ -17,10 +24,9 @@ module.exports = (config) => ({
       return;
     }
 
-    const embed = createEmbed(config)
-      .setTitle("Cash App")
-      .setDescription(`\`${config.cashAppTag}\`\n\n_Verify the tag before sending._`);
+    await interaction.reply({ embeds: [buildEmbed(config, describeCashApp(config))] });
+  },
 
-    await interaction.reply({ embeds: [embed] });
-  }
+  buildEmbed: () => buildEmbed(config, describeCashApp(config)),
+  describe: () => describeCashApp(config)
 });

@@ -1,12 +1,12 @@
 {
   "name": "deal-assistant",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Self-hosted Discord utility for sharing payment details, live cryptocurrency conversions, and customizable deal responses.",
   "license": "MIT",
   "main": "src/index.js",
   "type": "commonjs",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "scripts": {
     "start": "node src/index.js",
@@ -14,7 +14,9 @@
     "test": "node --test"
   },
   "dependencies": {
+    "@scure/base": "^2.4.0",
     "discord.js": "^14.26.4",
-    "dotenv": "^16.4.7"
+    "dotenv": "^16.4.7",
+    "js-sha3": "^0.16.0"
   }
 }

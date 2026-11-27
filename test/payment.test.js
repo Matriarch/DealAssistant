@@ -14,21 +14,14 @@ const {
   formatUsd,
   isValidAmount
 } = require("../src/utils/payment");
+const { createInteraction, validAddresses } = require("./helpers");
+
+const BTC_ADDRESS = validAddresses().BTC_ADDRESS;
 
 const CONFIG = {
   app: { displayName: "Example", embedColor: 0x90e838, footer: "" },
-  addresses: { btc: "bc1qexampleddress0000000000000000000000" }
+  addresses: { btc: BTC_ADDRESS }
 };
-
-function fakeInteraction(amount = null) {
-  const calls = [];
-  return {
-    options: { getNumber: () => amount },
-    reply: async (payload) => calls.push(payload),
-    followUp: async (payload) => calls.push(payload),
-    calls
-  };
-}
 
 function jsonResponse(payload, ok = true, status = 200) {
   return { ok, status, json: async () => payload };
@@ -44,6 +37,14 @@ test("formatCrypto trims trailing zeros and flags values below precision", () =>
   assert.equal(formatCrypto(0.004, 8), "0.004");
   assert.equal(formatCrypto(1, 2), "1");
   assert.equal(formatCrypto(0.000000001, 8), "< 0.00000001");
+});
+
+test("formatCrypto refuses amounts that must never be displayed", () => {
+  assert.equal(formatCrypto(Number.NaN, 8), null);
+  assert.equal(formatCrypto(Number.POSITIVE_INFINITY, 8), null);
+  assert.equal(formatCrypto(0, 8), null);
+  assert.equal(formatCrypto(-1, 8), null);
+  assert.equal(formatCrypto("1", 8), null);
 });
 
 test("isValidAmount rejects non-finite, zero, negative and oversized input", () => {
@@ -90,16 +91,53 @@ test("cached prices expire after the TTL", async () => {
   assert.equal(calls, 2);
 });
 
+test("simultaneous requests for the same currency share one HTTP call", async () => {
+  let calls = 0;
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+
+  const service = createPriceService({
+    fetchImpl: async () => {
+      calls += 1;
+      await gate;
+      return jsonResponse({ bitcoin: { usd: 50000 } });
+    }
+  });
+
+  const first = service.getUsdPrice("bitcoin");
+  const second = service.getUsdPrice("bitcoin");
+
+  release();
+
+  assert.deepEqual(await Promise.all([first, second]), [50000, 50000]);
+  assert.equal(calls, 1);
+});
+
 test("HTTP failures surface as PriceLookupError", async () => {
   const service = createPriceService({
-    fetchImpl: async () => jsonResponse({}, false, 429)
+    fetchImpl: async () => jsonResponse({}, false, 500)
   });
 
   await assert.rejects(() => service.getUsdPrice("bitcoin"), (error) => {
     assert.ok(error instanceof PriceLookupError);
-    assert.match(error.message, /HTTP 429/);
+    assert.match(error.message, /HTTP 500/);
     return true;
   });
+});
+
+test("rate limiting is reported without retrying", async () => {
+  let calls = 0;
+  const service = createPriceService({
+    fetchImpl: async () => {
+      calls += 1;
+      return jsonResponse({}, false, 429);
+    }
+  });
+
+  await assert.rejects(() => service.getUsdPrice("bitcoin"), /rate limited/);
+  assert.equal(calls, 1);
 });
 
 test("malformed price payloads surface as PriceLookupError", async () => {
@@ -121,14 +159,14 @@ test("payment embed shows address and network without an amount", () => {
   const embed = buildPaymentEmbed({
     commandName: "btc",
     method: PAYMENT_METHODS.btc,
-    address: CONFIG.addresses.btc,
+    address: BTC_ADDRESS,
     config: CONFIG
   }).toJSON();
 
   const text = JSON.stringify(embed);
   assert.equal(embed.title, "Bitcoin");
   assert.equal(embed.color, 0x90e838);
-  assert.match(text, /bc1qexampleddress/);
+  assert.match(text, new RegExp(BTC_ADDRESS));
   assert.match(text, /Bitcoin/);
   assert.match(text, /amount:200/);
 });
@@ -137,7 +175,7 @@ test("payment embed converts an amount using the supplied rate", () => {
   const embed = buildPaymentEmbed({
     commandName: "btc",
     method: PAYMENT_METHODS.btc,
-    address: CONFIG.addresses.btc,
+    address: BTC_ADDRESS,
     amountUsd: 200,
     price: 50000,
     config: CONFIG
@@ -163,52 +201,81 @@ test("stablecoin embeds disclose the assumed dollar parity", () => {
   assert.match(amountField.value, /Assumes 1 USDC = \$1\.00/);
 });
 
-test("a failed rate lookup still produces a usable embed", async () => {
+test("an amount conversion acknowledges before the price request", async () => {
   const command = createPaymentCommand("btc", CONFIG, {
-    priceService: { getUsdPrice: async () => { throw new Error("down"); } }
+    priceService: {
+      getUsdPrice: async (priceId) => {
+        deferredWhenPriceWasRequested = interaction.deferred;
+        return 50000;
+      }
+    }
   });
-  const interaction = fakeInteraction(200);
+
+  let deferredWhenPriceWasRequested = false;
+  const interaction = createInteraction({ amount: 200 });
 
   await command.execute(interaction);
 
-  const embed = interaction.calls[0].embeds[0].toJSON();
-  const amountField = embed.fields.find((field) => field.name === "Amount");
-  assert.match(amountField.value, /Live rate unavailable/);
-  assert.match(JSON.stringify(embed), /bc1qexampleddress/);
+  assert.equal(deferredWhenPriceWasRequested, true);
+  assert.equal(interaction.calls[0].type, "deferReply");
+  assert.equal(interaction.calls[1].type, "editReply");
+  assert.equal(interaction.calls.some((call) => call.type === "reply"), false);
 });
 
-test("payment command refuses an out of range amount", async () => {
+test("a timed out price lookup still returns the address", async () => {
+  const command = createPaymentCommand("btc", CONFIG, {
+    priceService: {
+      getUsdPrice: async () => {
+        throw new PriceLookupError("price request failed: The operation was aborted");
+      }
+    }
+  });
+
+  const interaction = createInteraction({ amount: 200 });
+  await command.execute(interaction);
+
+  const reply = interaction.calls.find((call) => call.type === "editReply");
+  const embed = reply.payload.embeds[0].toJSON();
+  const amountField = embed.fields.find((field) => field.name === "Amount");
+
+  assert.match(amountField.value, /Live rate unavailable/);
+  assert.match(JSON.stringify(embed), new RegExp(BTC_ADDRESS));
+});
+
+test("payment command refuses an out of range amount without deferring", async () => {
   const command = createPaymentCommand("btc", CONFIG, {
     priceService: { getUsdPrice: async () => 50000 }
   });
-  const interaction = fakeInteraction(0);
+  const interaction = createInteraction({ amount: 0 });
 
   await command.execute(interaction);
 
-  assert.match(interaction.calls[0].content, /Amount must be between/);
-  assert.equal(interaction.calls[0].flags, 64);
+  assert.equal(interaction.calls[0].type, "reply");
+  assert.match(interaction.calls[0].payload.content, /Amount must be between/);
+  assert.equal(interaction.calls[0].payload.flags, 64);
 });
 
 test("payment command reports a missing address instead of failing", async () => {
   const command = createPaymentCommand("btc", { ...CONFIG, addresses: {} }, {
     priceService: { getUsdPrice: async () => 50000 }
   });
-  const interaction = fakeInteraction(null);
+  const interaction = createInteraction({ amount: null });
 
   await command.execute(interaction);
 
-  assert.match(interaction.calls[0].content, /BTC_ADDRESS is not configured/);
+  assert.match(interaction.calls[0].payload.content, /BTC_ADDRESS is not configured/);
 });
 
 test("payment command replies with a converted amount", async () => {
   const command = createPaymentCommand("btc", CONFIG, {
     priceService: { getUsdPrice: async () => 50000 }
   });
-  const interaction = fakeInteraction(200);
+  const interaction = createInteraction({ amount: 200 });
 
   await command.execute(interaction);
 
-  const embed = interaction.calls[0].embeds[0].toJSON();
+  const reply = interaction.calls.find((call) => call.type === "editReply");
+  const embed = reply.payload.embeds[0].toJSON();
   const amountField = embed.fields.find((field) => field.name === "Amount");
   assert.match(amountField.value, /0\.004 BTC/);
 });

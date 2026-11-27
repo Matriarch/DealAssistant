@@ -6,17 +6,19 @@ const { REST, Routes } = require("discord.js");
 
 const { ConfigError, loadConfig } = require("./config");
 const { createCommands } = require("./commands");
+const { assertEmbedsWithinLimits } = require("./validate");
+const { redactError, registerSecret } = require("./utils/logger");
 
-function readConfig() {
+function withConfigErrors(work) {
   try {
-    return loadConfig();
+    return work();
   } catch (error) {
     if (error instanceof ConfigError) {
       console.error("Configuration error:");
       for (const problem of error.problems) {
         console.error(`  - ${problem}`);
       }
-      console.error("\nCopy .env.example to .env and fill in the required values.");
+      console.error("\nCopy .env.example to .env and correct the values above.");
       process.exit(1);
     }
 
@@ -24,13 +26,18 @@ function readConfig() {
   }
 }
 
-const config = readConfig();
+const config = withConfigErrors(() => loadConfig());
+registerSecret(config.discord.token);
 
 for (const warning of config.warnings) {
   console.warn(`[config] ${warning}`);
 }
 
-const commands = createCommands(config).map((command) => command.data.toJSON());
+const commands = withConfigErrors(() => {
+  const built = createCommands(config);
+  assertEmbedsWithinLimits(config, built);
+  return built;
+}).map((command) => command.data.toJSON());
 
 if (commands.length === 0) {
   console.error("No commands are enabled, so there is nothing to register.");
@@ -51,6 +58,6 @@ const rest = new REST({ version: "10" }).setToken(config.discord.token);
   console.log("\nRe-run this after changing command names, options, or enabled payout methods.");
   console.log("Discord can take up to an hour to propagate global commands.");
 })().catch((error) => {
-  console.error(`Failed to register commands: ${error.message}`);
+  console.error(`Failed to register commands: ${redactError(error).message}`);
   process.exit(1);
 });

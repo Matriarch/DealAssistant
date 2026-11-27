@@ -27,4 +27,8 @@ jobs:
 
       - run: npm ci
 
+      - name: Audit production dependencies
+        if: matrix.node-version == 24
+        run: npm audit --omit=dev --audit-level=high
+
       - run: npm test

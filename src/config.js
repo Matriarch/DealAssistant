@@ -8,6 +8,7 @@ const {
   PAYMENT_COMMAND_NAMES,
   COMMAND_NAMES
 } = require("./coins");
+const { VALIDATORS, validateAddress } = require("./utils/address");
 
 const DEFAULT_EMBED_COLOR = "#5865F2";
 const DEFAULT_DISPLAY_NAME = "Deal Assistant";
@@ -15,7 +16,6 @@ const DEFAULT_DISPLAY_NAME = "Deal Assistant";
 const SNOWFLAKE_RE = /^\d{17,20}$/;
 const HEX_COLOR_RE = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MIN_ADDRESS_LENGTH = 20;
 
 const DEFAULT_TEXTS = {
   infoMessage:
@@ -55,7 +55,7 @@ function parseColor(value, problems, label) {
   const input = String(value).trim();
 
   if (!HEX_COLOR_RE.test(input)) {
-    problems.push(`${label} must be a hex colour such as #5865F2 (received "${input}").`);
+    problems.push(`${label} must be a hex colour such as #5865F2.`);
     return null;
   }
 
@@ -73,12 +73,12 @@ function parseUrl(value, problems, label) {
   try {
     parsed = new URL(value);
   } catch {
-    problems.push(`${label} must be a full URL including https:// (received "${value}").`);
+    problems.push(`${label} must be a full URL including https://.`);
     return null;
   }
 
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    problems.push(`${label} must use http or https (received "${value}").`);
+    problems.push(`${label} must use http or https.`);
     return null;
   }
 
@@ -219,25 +219,31 @@ function loadConfig(options = {}) {
   const rawAddresses = {};
 
   for (const [commandName, method] of Object.entries(PAYMENT_METHODS)) {
-    const value = (env[method.envKey] ?? "").trim();
+    const raw = env[method.envKey] ?? "";
 
-    if (!value) {
+    if (raw.trim() === "") {
       continue;
     }
 
-    if (/\s/.test(value)) {
+    if (raw !== raw.trim()) {
+      problems.push(`${method.envKey} has leading or trailing whitespace. Remove it.`);
+      continue;
+    }
+
+    if (/\s/.test(raw)) {
       problems.push(`${method.envKey} must not contain spaces.`);
       continue;
     }
 
-    if (value.length < MIN_ADDRESS_LENGTH) {
+    const result = validateAddress(commandName, raw);
+    if (!result.valid) {
       problems.push(
-        `${method.envKey} looks too short to be a valid address (${value.length} characters).`
+        `${method.envKey} is not a valid ${VALIDATORS[commandName].label} address (${result.reason}).`
       );
       continue;
     }
 
-    const duplicate = Object.entries(rawAddresses).find(([, other]) => other === value);
+    const duplicate = Object.entries(rawAddresses).find(([, other]) => other === raw);
     if (duplicate) {
       warnings.push(
         `${method.envKey} is identical to ${PAYMENT_METHODS[duplicate[0]].envKey}. ` +
@@ -245,8 +251,8 @@ function loadConfig(options = {}) {
       );
     }
 
-    rawAddresses[commandName] = value;
-    addresses[commandName] = value;
+    rawAddresses[commandName] = raw;
+    addresses[commandName] = raw;
   }
 
   // --- contact links -----------------------------------------------------
@@ -273,7 +279,7 @@ function loadConfig(options = {}) {
     parseUrl(contacts.vouchThreadUrl, problems, "VOUCH_THREAD_URL");
   }
   if (contacts.email && !EMAIL_RE.test(contacts.email)) {
-    problems.push(`EMAIL_ADDRESS must look like name@example.com (received "${contacts.email}").`);
+    problems.push("EMAIL_ADDRESS must look like name@example.com.");
   }
 
   // --- cash app ----------------------------------------------------------

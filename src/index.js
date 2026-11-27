@@ -6,24 +6,29 @@ const {
   Client,
   Collection,
   Events,
-  GatewayIntentBits,
-  MessageFlags
+  GatewayIntentBits
 } = require("discord.js");
 
 const { ConfigError, loadConfig } = require("./config");
-const { guardInteraction } = require("./auth");
 const { createCommands } = require("./commands");
+const { assertEmbedsWithinLimits } = require("./validate");
+const { createInteractionHandler } = require("./router");
+const { redactError, registerSecret } = require("./utils/logger");
 
-function readConfig() {
+/**
+ * Runs startup work that can fail because of configuration, printing every
+ * problem before exiting rather than leaving a half-started process.
+ */
+function withConfigErrors(work) {
   try {
-    return loadConfig();
+    return work();
   } catch (error) {
     if (error instanceof ConfigError) {
       console.error("Configuration error:");
       for (const problem of error.problems) {
         console.error(`  - ${problem}`);
       }
-      console.error("\nCopy .env.example to .env and fill in the required values.");
+      console.error("\nCopy .env.example to .env and correct the values above.");
       process.exit(1);
     }
 
@@ -31,13 +36,21 @@ function readConfig() {
   }
 }
 
-const config = readConfig();
+const config = withConfigErrors(() => loadConfig());
+
+// Register the token so it can never be echoed by a log line.
+registerSecret(config.discord.token);
 
 for (const warning of config.warnings) {
   console.warn(`[config] ${warning}`);
 }
 
-const commands = createCommands(config);
+const commands = withConfigErrors(() => {
+  const built = createCommands(config);
+  assertEmbedsWithinLimits(config, built);
+  return built;
+});
+
 const commandMap = new Collection(commands.map((command) => [command.data.name, command]));
 
 if (commandMap.size === 0) {
@@ -45,56 +58,21 @@ if (commandMap.size === 0) {
   process.exit(1);
 }
 
-// Only the Guilds intent is needed: every response is an interaction reply,
-// so message content access is never required.
+// Only the Guilds intent is needed: every response is an interaction reply.
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}.`);
-  console.log(`Owner ID: ${config.discord.ownerId}`);
   console.log(`Commands: ${[...commandMap.keys()].map((name) => `/${name}`).join(", ")}`);
 });
 
-client.on(Events.InteractionCreate, async (interaction) => {
-  // Single authorisation gate for every interaction type.
-  if (!(await guardInteraction(interaction, config.discord.ownerId))) {
-    return;
-  }
-
-  if (!interaction.isChatInputCommand()) {
-    return;
-  }
-
-  const command = commandMap.get(interaction.commandName);
-
-  if (!command) {
-    return;
-  }
-
-  try {
-    await command.execute(interaction);
-  } catch (error) {
-    console.error(`[command] /${interaction.commandName} failed:`, error);
-
-    const payload = {
-      content: "Something went wrong while running that command.",
-      flags: MessageFlags.Ephemeral
-    };
-
-    try {
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp(payload);
-      } else {
-        await interaction.reply(payload);
-      }
-    } catch (replyError) {
-      console.error(`[command] could not report the error: ${replyError.message}`);
-    }
-  }
-});
+client.on(
+  Events.InteractionCreate,
+  createInteractionHandler({ ownerId: config.discord.ownerId, commandMap })
+);
 
 client.on(Events.Error, (error) => {
-  console.error("[client]", error);
+  console.error("[client]", redactError(error));
 });
 
 function shutdown(signal) {
@@ -105,10 +83,10 @@ function shutdown(signal) {
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("unhandledRejection", (reason) => {
-  console.error("[process] unhandled rejection:", reason);
+  console.error("[process] unhandled rejection:", redactError(reason));
 });
 
 client.login(config.discord.token).catch((error) => {
-  console.error(`Failed to log in: ${error.message}`);
+  console.error(`Failed to log in: ${redactError(error).message}`);
   process.exit(1);
 });

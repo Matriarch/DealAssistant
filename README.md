@@ -22,34 +22,36 @@ confirm a payment.
 | `/usdceth [amount]` | USDC on Ethereum address |
 | `/usdcsol [amount]` | USDC on Solana address |
 | `/cashapp` | Cash App tag |
-| `/info` | Your name, contact links and vouch links |
+| `/info` | Your name and contact links |
 | `/vouch [amount]` | Vouch prompt with your marketplace profile and thread |
 | `/middleman` | Your middleman policy |
 | `/help` | Lists the commands that are currently enabled |
 
 Payment commands are only registered when the matching address is configured, so
-users never see a command that cannot answer.
+nobody sees a command that cannot answer.
 
-`amount` is a USD figure. For example `/btc amount:200` shows the address, the
-approximate BTC amount at the current rate, and the rate used. Rates come from the
-CoinGecko public API and are cached for 60 seconds. If the lookup fails the
-command still returns the address and says the live rate was unavailable.
+`amount` is a USD figure. `/btc amount:200` shows the address, the approximate BTC
+amount and the rate used. Rates come from the CoinGecko public API, are cached for
+60 seconds, and simultaneous requests for the same currency share one call. If the
+lookup fails the command still returns the address and says the live rate was
+unavailable. The conversion is an estimate, not a quote, and no command claims to
+verify or confirm a payment.
 
 ## Requirements
 
-- Node.js 20 or newer
-- Your own Discord application (created below)
+- Node.js 22 or newer (Node.js 24 LTS recommended)
+- Your own Discord application, created below
 - No database, no Docker, no privileged intents
 
 ## Discord application setup
 
 1. Open <https://discord.com/developers/applications> and click **New Application**.
-2. Give it a name (for example `Deal Assistant`). This is the name people see, so
-   set a profile picture on the **General Information** page too.
+2. Give it a name (for example `Deal Assistant`) and set a profile picture on the
+   **General Information** page.
 3. On **General Information**, copy the **Application ID**. This becomes
    `DISCORD_CLIENT_ID`.
-4. Open the **Bot** page and click **Reset Token**, then copy the token once. This
-   becomes `DISCORD_TOKEN`. Do not share it or commit it anywhere.
+4. Open the **Bot** page, click **Reset Token**, and copy the token once. This
+   becomes `DISCORD_TOKEN`. Treat it like a password.
 5. Open the **Installation** page. Under **Installation Contexts**, enable
    **User Install** and save. Guild Install is optional — this app never needs to
    join a server, so leaving it off reduces the surface area.
@@ -58,21 +60,19 @@ command still returns the address and says the live rate was unavailable.
 7. Under **Default Install Settings**, add the `applications.commands` scope for
    **User Install**. Do not add the `bot` scope and do not grant Administrator or
    any other permissions — none are needed.
-8. Copy the install link and open it in your browser, then choose **Add to my
-   apps**. This installs the application on your own Discord account, which is
-   what lets the commands work in servers and DMs without inviting a bot to every
-   server.
+8. Copy the install link, open it in your browser, and choose **Add to my apps**.
+   This installs the application on your own Discord account, which is what lets
+   the commands work in servers and DMs without inviting a bot to every server.
 9. In Discord, open **User Settings -> Advanced** and enable **Developer Mode**.
-10. Right-click your own avatar anywhere and choose **Copy User ID**. This becomes
+10. Right-click your own avatar and choose **Copy User ID**. This becomes
     `DISCORD_OWNER_ID`.
-11. Register the commands (see below), start the app, and run `/info` in a server
-    or in a DM with the app. If it responds, the setup works.
+11. Register the commands, start the app, and run `/info` in a server or in a DM
+    with the app.
 
 `DISCORD_OWNER_ID` is a security setting, not a personalisation field. It decides
-who may run the commands. You can find your user ID only after enabling Developer
-Mode; it is not the same number as the Application ID.
+who may run the commands. It is not the same number as the Application ID.
 
-### About installation restrictions
+### Installation restrictions
 
 Disabling **Public Bot** on the Bot page only stops other people from adding your
 bot user to their servers. It does not prevent someone from installing a
@@ -83,13 +83,22 @@ against `DISCORD_OWNER_ID` before any command logic runs, including buttons,
 modals and autocomplete. Someone else may be able to install the app, but they
 cannot use it. Keep the install link private anyway.
 
+Servers also have a **Use External Apps** permission. Where a server disables it,
+members cannot run user-installed applications in that server. Discord may also
+show responses to a user-installed app privately, visible only to the person who
+ran the command, when the app is not a member of that server. These are Discord
+restrictions: DealAssistant cannot bypass them, and public responses are not
+guaranteed in every conversation.
+
 ## Configuration
 
-All configuration lives in two files: `.env` for values and credentials, and an
-optional `config.json` for longer text.
+All configuration lives in `.env`, plus an optional `config.json` for longer text.
+Both are validated at startup; the process exits with a specific message rather
+than failing later in Discord.
 
 ```bash
-cp .env.example .env
+# copy .env.example to .env, then edit it
+# on Windows: copy .env.example .env
 ```
 
 ### `.env`
@@ -110,6 +119,28 @@ cp .env.example .env
 Only public receiving addresses are needed. Never put a seed phrase or private key
 in this file.
 
+### Payment addresses
+
+Addresses are validated against the network for their command when the app starts.
+An invalid value stops startup with a message naming the variable; the value itself
+is never echoed and is never corrected or rewritten.
+
+| Command | Network | Accepted format |
+| --- | --- | --- |
+| `btc` | Bitcoin | Base58Check (`1…`, `3…`) or bech32/bech32m (`bc1…`) |
+| `ltc` | Litecoin | Base58Check (`L…`, `M…`, `3…`) or bech32/bech32m (`ltc1…`) |
+| `eth`, `usdceth` | Ethereum | `0x` plus 40 hex characters; mixed case must satisfy EIP-55 |
+| `sol`, `usdcsol` | Solana | Base58 that decodes to 32 bytes |
+
+Bech32 addresses are checksum-verified, and version 0 witness programs must use
+bech32 while version 1 and above must use bech32m. A Litecoin address in a Bitcoin
+variable, or a broken EIP-55 checksum, is rejected rather than accepted.
+
+Validation only proves the string is well formed for that network. It cannot prove
+you own the address, and it cannot prove that a particular wallet or exchange
+supports receiving a specific token on that network. USDC on Ethereum and USDC on
+Solana are different networks with different addresses.
+
 ### `config.json`
 
 Optional. Copy the example if you want to change the longer text:
@@ -127,108 +158,136 @@ cp config.example.json config.json
 }
 ```
 
-`{displayName}` and `{amount}` are replaced at runtime. Any key you omit falls back
-to the default shown in `config.example.json`. `config.json` is git-ignored because
-it holds personal text.
+`{displayName}` and `{amount}` are replaced at runtime. Omitted keys fall back to
+the defaults shown in `config.example.json`. `config.json` is git-ignored because
+it holds personal text. Text is measured against Discord's embed limits after
+substitution, so an oversized message is reported at startup.
 
 ## Installation and startup
 
 ```bash
 npm install
-# copy .env.example to .env, then edit it
-# on Windows: copy .env.example .env
+# copy .env.example to .env and fill it in
 npm run register          # once, and again whenever commands change
 npm start
 ```
 
-`npm run register` and `npm start` are different steps:
+`register` and `start` are different steps:
 
 - `register` uploads the slash command definitions to Discord. Run it once after
-  configuring, and again after changing commands, options or enabled payment
-  methods.
+  configuring, and again after changing commands, options or enabled addresses.
 - `start` connects the application to Discord and answers commands. It must keep
   running.
 
-Global command updates can take up to an hour to appear in Discord. If a command
-is missing, re-run `register` and wait, then restart your Discord client.
+Global command updates can take up to an hour to appear in Discord. If a command is
+missing, re-run `register`, wait, and restart your Discord client.
 
 ### Windows
 
 After `npm install` and a filled-in `.env`, double-click `start-dealassistant.bat`.
-It checks for Node, installs dependencies if they are missing, and starts the app.
+It checks the Node.js version, installs dependencies if they are missing, and
+starts the app.
 
 ### Linux and VPS
 
-```bash
-npm install --omit=dev
-npm run register
-npm start
-```
+Run the service as a dedicated unprivileged account rather than root:
 
-To keep it running, use a process manager such as systemd:
+```bash
+sudo useradd --system --home /opt/DealAssistant --shell /usr/sbin/nologin dealassistant
+sudo mkdir -p /opt/DealAssistant
+sudo chown -R dealassistant:dealassistant /opt/DealAssistant
+
+# place the project in /opt/DealAssistant, then
+cd /opt/DealAssistant
+sudo -u dealassistant npm ci --omit=dev
+sudo -u dealassistant npm run register
+
+# the .env file holds a bot token, so restrict it to the service account
+sudo chown dealassistant:dealassistant /opt/DealAssistant/.env
+sudo chmod 600 /opt/DealAssistant/.env
+```
 
 ```ini
 [Unit]
 Description=DealAssistant
 After=network-online.target
+Wants=network-online.target
 
 [Service]
+Type=simple
+User=dealassistant
+Group=dealassistant
 WorkingDirectory=/opt/DealAssistant
 ExecStart=/usr/bin/node src/index.js
-Restart=on-failure
 EnvironmentFile=/opt/DealAssistant/.env
+Restart=on-failure
+RestartSec=5
+
+# the process needs no write access and no extra privileges
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-`pm2 start src/index.js --name dealassistant` works too.
+`pm2 start src/index.js --name dealassistant` also works if you prefer a process
+manager.
 
 ## Security
 
-- The bot token is a credential. Keep `.env` out of version control; it is already
-  in `.gitignore`.
+- The bot token is a credential. `.env` is git-ignored; never commit or share it.
 - Only `DISCORD_OWNER_ID` may run commands. The check is centralised in
   `src/auth.js` and applies to every interaction type.
-- The app requests no privileged intents, no bot permissions and no Administrator
-  access. It only needs the `applications.commands` scope.
-- Responses are public by default so you can share them with a counterparty. That
-  is intentional: the owner shares, not a stranger executing commands.
-- Nothing is stored. There is no database and no logging of addresses or users.
-- Do not paste seed phrases or private keys into `.env`, `config.json`, or the
-  Discord chat.
+- The app requests no privileged intents and no bot permissions. It only needs the
+  `applications.commands` scope.
+- Nothing is stored: no database, no message content, no logging of addresses or
+  users.
+- Logs are filtered for tokens, webhook URLs and bearer headers before anything is
+  written.
+- Do not paste seed phrases or private keys into `.env`, `config.json`, or chat.
 
 ## Troubleshooting
 
 **Commands do not appear.** Run `npm run register` again. Global commands can take
-up to an hour. Make sure you installed the app to your own account ("Add to my
-apps"), and that `.env` contains the Application ID of the same app whose token you
-are using. Restart the Discord client.
+up to an hour. Confirm you installed the app to your own account ("Add to my
+apps"), and that `DISCORD_CLIENT_ID` belongs to the same application as the token.
+Restart the Discord client.
+
+**Startup stops with a configuration error.** The message names the variable. An
+invalid address, a malformed URL, an oversized embed text, or a missing owner ID all
+stop startup on purpose. Fix the value and start again.
 
 **`Invalid token` on startup.** The token was copied incorrectly or was reset.
 Generate a new one on the Bot page and update `DISCORD_TOKEN`.
 
-**Commands fail with "application did not respond".** The process is not running,
-or it crashed. Check the terminal output.
+**"This application is private" reply.** The account you are using is not
+`DISCORD_OWNER_ID`. Copy your own user ID again — it is not the application ID.
 
-**Only my other account can run commands / "private application" reply.** The
-account you are using is not `DISCORD_OWNER_ID`. Copy your own user ID again — it
-is not the application ID.
+**A command is missing.** Its address is not configured, or `ENABLED_COMMANDS`
+excludes it. The startup log lists disabled commands with the reason.
 
-**A command is missing entirely.** Its address is not configured, or
-`ENABLED_COMMANDS` excludes it. Check the startup log: disabled commands are
-listed with the reason.
+**A command replies that it is unavailable.** The registered command no longer
+exists in this configuration. Re-run `npm run register`.
 
-**Commands work in DMs but not in a server.** The app is installed to your user
-account but the command is not available in that context. User-install commands
-work in servers, the app's DM, and group DMs; make sure you are not expecting
-guild-install behaviour from a user-install app.
+**Commands work in a DM but not in a server.** The server may disable **Use
+External Apps**, or the app may not be permitted to post there. Responses can be
+private in that case; this is a Discord restriction.
 
 **The rate shows as unavailable.** CoinGecko was unreachable or rate limited. The
-address is still returned. Check the network and try again shortly.
+address is still returned. Requests are not retried to avoid worsening a rate
+limit.
 
-**`config.json could not be parsed`.** The file is not valid JSON — check for
-trailing commas and unescaped quotes.
+**`config.json could not be parsed`.** The file is not valid JSON — check trailing
+commas and unescaped quotes.
 
 ## Tests
 
@@ -236,9 +295,14 @@ trailing commas and unescaped quotes.
 npm test
 ```
 
-The suite runs offline: Discord interactions and the price API are mocked, so no
-token or network access is required. GitHub Actions runs it on Node.js 22 and 24
-for every push and pull request.
+The suite runs offline: Discord interactions and the price API are mocked. It covers
+address validation for every supported network, deferred acknowledgements, rate
+timeouts and fallbacks, embed limits, owner-only authorisation, log redaction, and
+configuration failures. GitHub Actions runs it on Node.js 22 and 24 and audits
+production dependencies on every push and pull request.
+
+Live Discord integration is not part of the test suite; it requires a separate
+application and token.
 
 ## License
 

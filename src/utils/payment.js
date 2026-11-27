@@ -3,7 +3,7 @@
 const { MessageFlags } = require("discord.js");
 
 const { PAYMENT_METHODS } = require("../coins");
-const { createEmbed } = require("./embeds");
+const { buildEmbed: renderEmbed, describeEmbed } = require("./embeds");
 const { defineCommand } = require("./command");
 
 const MIN_AMOUNT_USD = 1;
@@ -21,11 +21,12 @@ class PriceLookupError extends Error {
 }
 
 /**
- * Small cached wrapper around the CoinGecko simple price endpoint.
+ * Cached wrapper around the CoinGecko simple price endpoint.
  *
- * The cache exists to keep the application well inside the public rate limit,
- * and every failure mode is surfaced as a PriceLookupError so callers can fall
- * back to showing the address without a conversion.
+ * Simultaneous requests for the same currency share one in-flight promise, so a
+ * burst of commands issues one HTTP request instead of several. Failures are
+ * surfaced as PriceLookupError; there is no retry loop, because the public
+ * endpoint rate limits aggressively and the command can still show the address.
  */
 function createPriceService(options = {}) {
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
@@ -33,13 +34,9 @@ function createPriceService(options = {}) {
   const timeoutMs = options.timeoutMs ?? PRICE_TIMEOUT_MS;
   const now = options.now ?? (() => Date.now());
   const cache = new Map();
+  const inFlight = new Map();
 
-  async function getUsdPrice(priceId) {
-    const cached = cache.get(priceId);
-    if (cached && now() - cached.at < ttlMs) {
-      return cached.usd;
-    }
-
+  async function fetchPrice(priceId) {
     if (typeof fetchImpl !== "function") {
       throw new PriceLookupError("no fetch implementation is available");
     }
@@ -54,6 +51,10 @@ function createPriceService(options = {}) {
       });
     } catch (error) {
       throw new PriceLookupError(`price request failed: ${error.message}`);
+    }
+
+    if (response.status === 429) {
+      throw new PriceLookupError("price request was rate limited (HTTP 429)");
     }
 
     if (!response.ok) {
@@ -76,9 +77,28 @@ function createPriceService(options = {}) {
     return usd;
   }
 
+  async function getUsdPrice(priceId) {
+    const cached = cache.get(priceId);
+    if (cached && now() - cached.at < ttlMs) {
+      return cached.usd;
+    }
+
+    let pending = inFlight.get(priceId);
+
+    if (!pending) {
+      pending = fetchPrice(priceId).finally(() => inFlight.delete(priceId));
+      inFlight.set(priceId, pending);
+    }
+
+    return pending;
+  }
+
   return {
     getUsdPrice,
-    clearCache: () => cache.clear()
+    clearCache: () => {
+      cache.clear();
+      inFlight.clear();
+    }
   };
 }
 
@@ -94,14 +114,25 @@ function formatUsd(value) {
   });
 }
 
+/**
+ * Formats a crypto amount at a coin's precision.
+ *
+ * Returns null for values that must never be shown as a payment amount
+ * (non-finite, zero or negative), so callers fall back to "rate unavailable"
+ * instead of printing something misleading.
+ */
 function formatCrypto(value, decimals) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+
   let text = value.toFixed(decimals);
 
   if (text.includes(".")) {
     text = text.replace(/0+$/, "").replace(/\.$/, "");
   }
 
-  if (Number(text) === 0 && value > 0) {
+  if (Number(text) === 0) {
     return `< 0.${"0".repeat(decimals - 1)}1`;
   }
 
@@ -117,52 +148,51 @@ function isValidAmount(value) {
   );
 }
 
-function buildPaymentEmbed({ commandName, method, address, amountUsd, price, priceUnavailable, config }) {
-  const embed = createEmbed(config).setTitle(method.title);
+function describePayment({ commandName, method, address, amountUsd, price, config }) {
+  const spec = { title: method.title, fields: [] };
   const safeAddress = String(address).replace(/`/g, "");
 
   if (typeof amountUsd === "number") {
     const lines = [];
+    const converted =
+      method.usdPeg || typeof price !== "number" ? null : formatCrypto(amountUsd / price, method.decimals);
 
     if (method.usdPeg) {
-      lines.push(
-        `${formatUsd(amountUsd)} \u2248 **${formatCrypto(amountUsd, method.decimals)} ${method.symbol}**`
-      );
+      const pegAmount = formatCrypto(amountUsd, method.decimals);
+      lines.push(`${formatUsd(amountUsd)} \u2248 **${pegAmount ?? "?"} ${method.symbol}**`);
       lines.push(`_Assumes 1 ${method.symbol} = $1.00._`);
-    } else if (typeof price === "number") {
-      const cryptoAmount = amountUsd / price;
-      lines.push(
-        `${formatUsd(amountUsd)} \u2248 **${formatCrypto(cryptoAmount, method.decimals)} ${method.symbol}**`
-      );
+    } else if (converted) {
+      lines.push(`${formatUsd(amountUsd)} \u2248 **${converted} ${method.symbol}**`);
       lines.push(`Rate: ${formatUsd(price)} per ${method.symbol}`);
       lines.push("_Estimate only \u2014 the rate moves._");
     } else {
       lines.push(`${formatUsd(amountUsd)} worth of ${method.symbol}`);
-      if (priceUnavailable) {
-        lines.push("_Live rate unavailable right now \u2014 check the rate before sending._");
-      }
+      lines.push("_Live rate unavailable right now \u2014 check the rate before sending._");
     }
 
-    embed.addFields({ name: "Amount", value: lines.join("\n") });
+    spec.fields.push({ name: "Amount", value: lines.join("\n") });
   } else {
-    embed.setDescription(
-      `_Add \`amount\` to convert from USD, e.g. \`/${commandName} amount:200\`._`
-    );
+    spec.description = `_Add \`amount\` to convert from USD, e.g. \`/${commandName} amount:200\`._`;
   }
 
-  embed.addFields(
+  spec.fields.push(
     { name: "Address", value: `\`\`\`text\n${safeAddress}\n\`\`\`` },
     { name: "Network", value: method.network }
   );
 
-  return embed;
+  return spec;
+}
+
+function buildPaymentEmbed(args) {
+  return renderEmbed(args.config, describePayment(args));
 }
 
 /**
  * Builds a payment command for one of the supported currencies.
  *
- * The command is only created for currencies that have a configured address,
- * so users never see a command that cannot answer.
+ * The command is only created for currencies that have a configured address.
+ * Any conversion path defers the interaction first, because a price lookup can
+ * take several seconds while Discord requires an acknowledgement within three.
  */
 function createPaymentCommand(commandName, config, deps = {}) {
   const method = PAYMENT_METHODS[commandName];
@@ -171,15 +201,29 @@ function createPaymentCommand(commandName, config, deps = {}) {
   const data = defineCommand(
     commandName,
     `Show the ${method.title} payment address, with an optional USD amount.`
-  )
-    .addNumberOption((option) =>
-      option
-        .setName("amount")
-        .setDescription("Deal amount in USD (for example 200) to convert into crypto.")
-        .setRequired(false)
-        .setMinValue(MIN_AMOUNT_USD)
-        .setMaxValue(MAX_AMOUNT_USD)
-    );
+  ).addNumberOption((option) =>
+    option
+      .setName("amount")
+      .setDescription("Deal amount in USD (for example 200) to convert into crypto.")
+      .setRequired(false)
+      .setMinValue(MIN_AMOUNT_USD)
+      .setMaxValue(MAX_AMOUNT_USD)
+  );
+
+  function describe({ amountUsd, price } = {}) {
+    return describePayment({
+      commandName,
+      method,
+      address: config.addresses[commandName] ?? "address",
+      amountUsd,
+      price: typeof price === "number" ? price : 50_000,
+      config
+    });
+  }
+
+  function buildEmbed(args = {}) {
+    return renderEmbed(config, describe(args));
+  }
 
   async function execute(interaction) {
     const address = config.addresses[commandName];
@@ -203,40 +247,49 @@ function createPaymentCommand(commandName, config, deps = {}) {
       return;
     }
 
+    const needsConversion = typeof amountUsd === "number" && !method.usdPeg;
     let price;
     let priceUnavailable = false;
 
-    if (typeof amountUsd === "number" && !method.usdPeg) {
+    if (needsConversion) {
+      // Acknowledge before the network call so the interaction never times out.
+      await interaction.deferReply();
+
       try {
         price = await priceService.getUsdPrice(method.priceId);
       } catch (error) {
-        console.error(`[price] ${method.symbol}: ${error.message}`);
         priceUnavailable = true;
+        console.warn(`[price] ${method.symbol}: ${error.message}`);
       }
     }
 
-    await interaction.reply({
-      embeds: [
-        buildPaymentEmbed({
-          commandName,
-          method,
-          address,
-          amountUsd,
-          price,
-          priceUnavailable,
-          config
-        })
-      ]
-    });
+    const payload = {
+      embeds: [buildPaymentEmbed({
+        commandName,
+        method,
+        address,
+        amountUsd,
+        price,
+        priceUnavailable,
+        config
+      })]
+    };
+
+    if (needsConversion) {
+      await interaction.editReply(payload);
+    } else {
+      await interaction.reply(payload);
+    }
   }
 
-  return { data, execute };
+  return { data, execute, buildEmbed, describe };
 }
 
 module.exports = {
   MAX_AMOUNT_USD,
   MIN_AMOUNT_USD,
   PRICE_CACHE_TTL_MS,
+  PRICE_TIMEOUT_MS,
   PriceLookupError,
   buildPaymentEmbed,
   createPaymentCommand,

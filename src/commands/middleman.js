@@ -1,16 +1,22 @@
 "use strict";
 
 const { defineCommand } = require("../utils/command");
-const { createEmbed } = require("../utils/embeds");
+const { buildEmbed } = require("../utils/embeds");
+
+function describeMiddleman(config) {
+  return {
+    title: "Middleman Policy",
+    description: config.texts.middlemanPolicy.join("\n\n")
+  };
+}
 
 module.exports = (config) => ({
   data: defineCommand("middleman", "Show your middleman policy."),
 
   async execute(interaction) {
-    const embed = createEmbed(config)
-      .setTitle("Middleman Policy")
-      .setDescription(config.texts.middlemanPolicy.join("\n\n"));
+    await interaction.reply({ embeds: [buildEmbed(config, describeMiddleman(config))] });
+  },
 
-    await interaction.reply({ embeds: [embed] });
-  }
+  buildEmbed: () => buildEmbed(config, describeMiddleman(config)),
+  describe: () => describeMiddleman(config)
 });

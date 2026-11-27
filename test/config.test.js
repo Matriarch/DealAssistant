@@ -13,6 +13,7 @@ const {
   parseColor,
   renderTemplate
 } = require("../src/config");
+const { litecoinLegacyAddress, validAddresses } = require("./helpers");
 
 const BASE_ENV = {
   DISCORD_TOKEN: "MTA.example-token-value",
@@ -73,8 +74,15 @@ test("owner id equal to the application id is rejected", () => {
   );
 });
 
-test("invalid embed colour is rejected", () => {
-  assert.throws(() => load({ EMBED_COLOR: "green" }), /hex colour/);
+test("invalid embed colour is rejected without echoing the value", () => {
+  assert.throws(
+    () => load({ EMBED_COLOR: "chartreuse" }),
+    (error) => {
+      assert.match(error.message, /hex colour/);
+      assert.equal(error.message.includes("chartreuse"), false);
+      return true;
+    }
+  );
 });
 
 test("three digit hex colours expand correctly", () => {
@@ -89,17 +97,52 @@ test("display name and footer are applied", () => {
   assert.equal(config.app.footer, "example footer");
 });
 
-test("a payment command is enabled only when its address is set", () => {
-  const address = "bc1qexampleddress0000000000000000000000";
-  const config = load({ BTC_ADDRESS: address });
+test("every supported network accepts a valid address", () => {
+  const addresses = validAddresses();
+  const config = load(addresses);
 
-  assert.ok(config.isEnabled("btc"));
-  assert.equal(config.addresses.btc, address);
+  for (const commandName of ["btc", "ltc", "eth", "sol", "usdceth", "usdcsol"]) {
+    assert.ok(config.isEnabled(commandName), `${commandName} should be enabled`);
+  }
 });
 
-test("short or malformed addresses are rejected", () => {
-  assert.throws(() => load({ BTC_ADDRESS: "abc" }), /too short/);
-  assert.throws(() => load({ BTC_ADDRESS: "bc1q example address padded out" }), /spaces/);
+test("an address from the wrong network is rejected", () => {
+  const config = () => load({ BTC_ADDRESS: litecoinLegacyAddress() });
+
+  assert.throws(config, (error) => {
+    assert.match(error.message, /BTC_ADDRESS is not a valid Bitcoin address/);
+    return true;
+  });
+});
+
+test("an Ethereum address with a broken EIP-55 checksum is rejected", () => {
+  const invalid = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD";
+  assert.throws(() => load({ ETH_ADDRESS: invalid }), /EIP-55 checksum/);
+});
+
+test("surrounding whitespace is rejected rather than trimmed", () => {
+  const address = validAddresses().BTC_ADDRESS;
+
+  assert.throws(() => load({ BTC_ADDRESS: ` ${address}` }), /leading or trailing whitespace/);
+});
+
+test("a malformed address is rejected without echoing it", () => {
+  assert.throws(
+    () => load({ BTC_ADDRESS: "not-an-address-at-all-000000" }),
+    (error) => {
+      assert.match(error.message, /not a valid Bitcoin address/);
+      assert.equal(error.message.includes("not-an-address-at-all"), false);
+      return true;
+    }
+  );
+});
+
+test("duplicate addresses produce a warning, not an error", () => {
+  const address = validAddresses().ETH_ADDRESS;
+  const config = load({ ETH_ADDRESS: address, USDC_ETH_ADDRESS: address });
+
+  assert.ok(config.isEnabled("eth"));
+  assert.match(config.warnings.join(" "), /identical to ETH_ADDRESS/);
 });
 
 test("unknown ENABLED_COMMANDS entries are rejected", () => {
