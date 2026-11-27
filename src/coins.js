@@ -63,7 +63,7 @@ const PAYMENT_METHODS = {
 
 const PAYMENT_COMMAND_NAMES = Object.keys(PAYMENT_METHODS);
 
-const NON_PAYMENT_COMMANDS = ["cashapp", "info", "vouch", "middleman", "help"];
+const NON_PAYMENT_COMMANDS = ["cashapp", "info", "vouch", "middleman", "pay", "help"];
 
 const COMMAND_NAMES = [...PAYMENT_COMMAND_NAMES, ...NON_PAYMENT_COMMANDS];
 

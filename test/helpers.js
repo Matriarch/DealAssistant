@@ -63,6 +63,8 @@ function validAddresses() {
 function createInteraction(options = {}) {
   const {
     amount = null,
+    strings = {},
+    booleans = {},
     commandName = "test",
     userId = "987654321098765432",
     deferred = false,
@@ -76,7 +78,11 @@ function createInteraction(options = {}) {
   const interaction = {
     commandName,
     user: { id: userId },
-    options: { getNumber: () => amount },
+    options: {
+      getNumber: () => amount,
+      getString: (name) => strings[name] ?? null,
+      getBoolean: (name) => booleans[name] ?? null
+    },
     isRepliable: () => repliable,
     isChatInputCommand: () => true,
 

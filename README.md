@@ -15,6 +15,7 @@ confirm a payment.
 
 | Command | Description |
 | --- | --- |
+| `/pay currency:BTC [amount] [qr]` | Share details for one of your configured payment methods |
 | `/btc [amount]` | Bitcoin address, optionally converted from a USD amount |
 | `/ltc [amount]` | Litecoin address, optionally converted |
 | `/eth [amount]` | Ethereum address, optionally converted |
@@ -29,6 +30,12 @@ confirm a payment.
 
 Payment commands are only registered when the matching address is configured, so
 nobody sees a command that cannot answer.
+
+`/pay` lists configured methods, including Cash App when set. The individual
+cryptocurrency commands remain available as shortcuts. Set
+`PAYMENT_QR_ENABLED=true` and rerun registration to add the optional `qr:true`
+argument to cryptocurrency payments. The image is generated locally and encodes
+the same address shown in the response. Amounts stay outside the QR code.
 
 `amount` is a USD figure. `/btc amount:200` shows the address, the approximate BTC
 amount and the rate used. Rates come from the CoinGecko public API, are cached for

@@ -6,6 +6,8 @@ const { PAYMENT_METHODS } = require("../coins");
 const { buildEmbed: renderEmbed, describeEmbed } = require("./embeds");
 const { defineCommand } = require("./command");
 const { redactError } = require("./logger");
+const { createAddressQr, QR_FILENAME } = require("./qr");
+const { replyEphemeral } = require("./replies");
 
 const MIN_AMOUNT_USD = 1;
 const MAX_AMOUNT_USD = 1_000_000;
@@ -149,9 +151,8 @@ function isValidAmount(value) {
   );
 }
 
-function describePayment({ commandName, method, address, amountUsd, price, config }) {
+function describePayment({ commandName, method, address, amountUsd, price, includeQr }) {
   const spec = { title: method.title, fields: [] };
-  const safeAddress = String(address).replace(/`/g, "");
 
   if (typeof amountUsd === "number") {
     const lines = [];
@@ -172,20 +173,91 @@ function describePayment({ commandName, method, address, amountUsd, price, confi
     }
 
     spec.fields.push({ name: "Amount", value: lines.join("\n") });
-  } else {
-    spec.description = `_Add \`amount\` to convert from USD, e.g. \`/${commandName} amount:200\`._`;
+  } else if (method.priceId || method.usdPeg) {
+    const example = commandName === "pay" ? "/pay currency:BTC amount:200" : `/${commandName} amount:200`;
+    spec.description = `_Add \`amount\` to convert from USD, e.g. \`${example}\`._`;
   }
 
   spec.fields.push(
-    { name: "Address", value: `\`\`\`text\n${safeAddress}\n\`\`\`` },
+    { name: method.addressLabel ?? "Address", value: `\`\`\`text\n${address}\n\`\`\`` },
     { name: "Network", value: method.network }
   );
+  if (includeQr) {
+    spec.image = `attachment://${QR_FILENAME}`;
+  }
 
   return spec;
 }
 
 function buildPaymentEmbed(args) {
   return renderEmbed(args.config, describePayment(args));
+}
+
+function addPaymentAmountOption(data) {
+  return data.addNumberOption((option) =>
+    option
+      .setName("amount")
+      .setDescription("Deal amount in USD (for example 200) to convert into crypto.")
+      .setMinValue(MIN_AMOUNT_USD)
+      .setMaxValue(MAX_AMOUNT_USD)
+  );
+}
+
+function addQrOption(data) {
+  return data.addBooleanOption((option) =>
+    option.setName("qr").setDescription("Attach a QR code containing the receiving address.")
+  );
+}
+
+async function sendPayment(interaction, { commandName, method, address, config, deps = {} }) {
+  const amountUsd = interaction.options.getNumber("amount") ?? undefined;
+  const wantsQr = config.paymentQrEnabled && interaction.options.getBoolean("qr") === true;
+
+  if (amountUsd !== undefined && !isValidAmount(amountUsd)) {
+    return replyEphemeral(interaction, `Amount must be between $${MIN_AMOUNT_USD} and $${MAX_AMOUNT_USD.toLocaleString("en-US")}.`);
+  }
+  if (amountUsd !== undefined && !method.priceId && !method.usdPeg) {
+    return replyEphemeral(interaction, "This method provides payment details only. Run the command without an amount.");
+  }
+  if (wantsQr && !method.supportsQr) {
+    return replyEphemeral(interaction, "QR codes are unavailable for this method. Run the command without the QR option.");
+  }
+
+  const needsConversion = amountUsd !== undefined && !method.usdPeg;
+  const deferred = needsConversion || wantsQr;
+  if (deferred) {
+    await interaction.deferReply();
+  }
+
+  let price;
+  if (needsConversion) {
+    try {
+      price = await (deps.priceService ?? defaultPriceService).getUsdPrice(method.priceId);
+    } catch (error) {
+      console.warn(`[price] ${method.symbol}: ${redactError(error).message}`);
+    }
+  }
+
+  const files = [];
+  if (wantsQr) {
+    try {
+      files.push({ attachment: await createAddressQr(address), name: QR_FILENAME });
+    } catch {
+      console.warn("[payment] Could not generate address QR code.");
+    }
+  }
+
+  const payload = {
+    embeds: [buildPaymentEmbed({ commandName, method, address, amountUsd, price, config, includeQr: files.length > 0 })],
+    allowedMentions: { parse: [] }
+  };
+  if (files.length) {
+    payload.files = files;
+  } else if (wantsQr) {
+    payload.content = "The QR code could not be generated. The receiving address is shown below.";
+  }
+
+  return deferred ? interaction.editReply(payload) : interaction.reply(payload);
 }
 
 /**
@@ -196,20 +268,15 @@ function buildPaymentEmbed(args) {
  * take several seconds while Discord requires an acknowledgement within three.
  */
 function createPaymentCommand(commandName, config, deps = {}) {
-  const method = PAYMENT_METHODS[commandName];
-  const priceService = deps.priceService ?? defaultPriceService;
+  const method = { ...PAYMENT_METHODS[commandName], supportsQr: true };
 
-  const data = defineCommand(
+  const data = addPaymentAmountOption(defineCommand(
     commandName,
     `Show the ${method.title} payment address, with an optional USD amount.`
-  ).addNumberOption((option) =>
-    option
-      .setName("amount")
-      .setDescription("Deal amount in USD (for example 200) to convert into crypto.")
-      .setRequired(false)
-      .setMinValue(MIN_AMOUNT_USD)
-      .setMaxValue(MAX_AMOUNT_USD)
-  );
+  ));
+  if (config.paymentQrEnabled) {
+    addQrOption(data);
+  }
 
   function describe({ amountUsd, price } = {}) {
     return describePayment({
@@ -237,50 +304,7 @@ function createPaymentCommand(commandName, config, deps = {}) {
       return;
     }
 
-    const requestedAmount = interaction.options.getNumber("amount");
-    const amountUsd = requestedAmount === null ? undefined : requestedAmount;
-
-    if (amountUsd !== undefined && !isValidAmount(amountUsd)) {
-      await interaction.reply({
-        content: `Amount must be between $${MIN_AMOUNT_USD} and $${MAX_AMOUNT_USD.toLocaleString("en-US")}.`,
-        flags: MessageFlags.Ephemeral
-      });
-      return;
-    }
-
-    const needsConversion = typeof amountUsd === "number" && !method.usdPeg;
-    let price;
-    let priceUnavailable = false;
-
-    if (needsConversion) {
-      // Acknowledge before the network call so the interaction never times out.
-      await interaction.deferReply();
-
-      try {
-        price = await priceService.getUsdPrice(method.priceId);
-      } catch (error) {
-        priceUnavailable = true;
-        console.warn(`[price] ${method.symbol}: ${redactError(error).message}`);
-      }
-    }
-
-    const payload = {
-      embeds: [buildPaymentEmbed({
-        commandName,
-        method,
-        address,
-        amountUsd,
-        price,
-        priceUnavailable,
-        config
-      })]
-    };
-
-    if (needsConversion) {
-      await interaction.editReply(payload);
-    } else {
-      await interaction.reply(payload);
-    }
+    return sendPayment(interaction, { commandName, method, address, config, deps });
   }
 
   return { data, execute, buildEmbed, describe };
@@ -292,10 +316,13 @@ module.exports = {
   PRICE_CACHE_TTL_MS,
   PRICE_TIMEOUT_MS,
   PriceLookupError,
+  addPaymentAmountOption,
+  addQrOption,
   buildPaymentEmbed,
   createPaymentCommand,
   createPriceService,
   formatCrypto,
   formatUsd,
-  isValidAmount
+  isValidAmount,
+  sendPayment
 };

@@ -221,6 +221,11 @@ function loadConfig(options = {}) {
   );
 
   const footer = isBlank(env.EMBED_FOOTER) ? "" : env.EMBED_FOOTER.trim();
+  const paymentQrSetting = (env.PAYMENT_QR_ENABLED ?? "").trim().toLowerCase();
+  if (!["", "true", "false"].includes(paymentQrSetting)) {
+    problems.push("PAYMENT_QR_ENABLED must be true or false.");
+  }
+  const paymentQrEnabled = paymentQrSetting === "true";
 
   // --- payment addresses -------------------------------------------------
   const addresses = {};
@@ -325,6 +330,23 @@ function loadConfig(options = {}) {
 
   // --- command selection -------------------------------------------------
   const enabledCommands = parseEnabledCommands(env.ENABLED_COMMANDS, problems);
+  const paymentMethods = new Map();
+  for (const [name, address] of Object.entries(addresses)) {
+    const id = { usdceth: "USDC-ETH", usdcsol: "USDC-SOL" }[name] ?? name.toUpperCase();
+    paymentMethods.set(id, { ...PAYMENT_METHODS[name], address, supportsQr: true });
+  }
+  if (cashAppTag) {
+    paymentMethods.set("CASHAPP", {
+      title: "Cash App",
+      network: "Cash App",
+      address: cashAppTag,
+      addressLabel: "Cashtag"
+    });
+  }
+  if (enabledCommands.has("pay") && paymentMethods.size === 0) {
+    enabledCommands.delete("pay");
+    warnings.push("/pay is disabled because no payment methods are configured.");
+  }
 
   for (const commandName of PAYMENT_COMMAND_NAMES) {
     if (!enabledCommands.has(commandName)) {
@@ -359,6 +381,8 @@ function loadConfig(options = {}) {
     discord: { token, clientId, ownerId },
     app: { displayName, embedColor, footer },
     addresses,
+    paymentMethods,
+    paymentQrEnabled,
     cashAppTag,
     contacts,
     texts,

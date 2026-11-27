@@ -13,6 +13,7 @@ const factories = {
   info: require("./info"),
   vouch: require("./vouch"),
   middleman: require("./middleman"),
+  pay: require("./pay"),
   help: require("./help")
 };
 

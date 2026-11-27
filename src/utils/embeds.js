@@ -50,6 +50,9 @@ function buildEmbed(config, spec) {
   if (described.footer) {
     embed.setFooter({ text: described.footer });
   }
+  if (spec.image) {
+    embed.setImage(spec.image);
+  }
 
   return embed;
 }
