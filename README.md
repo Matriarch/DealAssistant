@@ -17,6 +17,8 @@ keys, or confirms payments.
 | `/fees amount:200 percent:2.50` | Show the percentage fee and net amount privately |
 | `/fees amount:200 fixed:3 fiat:CAD` | Deduct a 3 CAD fixed fee privately |
 
+![Illustrative payment and price embeds with synthetic values](docs/example-embeds.png)
+
 The payment shortcuts also include `/ltc`, `/eth`, `/sol`, `/usdceth`, `/usdcsol`,
 and `/cashapp`. `/help` groups enabled commands by category, including your custom
 commands. Enable `/fees` with `"feesEnabled": true` in `config.json`.
