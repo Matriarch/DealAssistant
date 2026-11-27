@@ -9,12 +9,14 @@ const {
   COMMAND_NAMES
 } = require("./coins");
 const { VALIDATORS, validateAddress } = require("./utils/address");
+const { parseColor, parseUrl, renderTemplate } = require("./config-values");
+const { addCustomPaymentMethods } = require("./config-payments");
+const { MAX_GLOBAL_COMMANDS, readCustomCommands } = require("./custom-commands");
 
 const DEFAULT_EMBED_COLOR = "#5865F2";
 const DEFAULT_DISPLAY_NAME = "Deal Assistant";
 
 const SNOWFLAKE_RE = /^\d{17,20}$/;
-const HEX_COLOR_RE = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const DEFAULT_TEXTS = {
@@ -51,51 +53,9 @@ function looksLikePlaceholder(value) {
   );
 }
 
-function parseColor(value, problems, label) {
-  const input = String(value).trim();
-
-  if (!HEX_COLOR_RE.test(input)) {
-    problems.push(`${label} must be a hex colour such as #5865F2.`);
-    return null;
-  }
-
-  let hex = input.replace("#", "");
-  if (hex.length === 3) {
-    hex = hex.split("").map((c) => c + c).join("");
-  }
-
-  return parseInt(hex, 16);
-}
-
-function parseUrl(value, problems, label) {
-  let parsed;
-
-  try {
-    if (/[\s<>()[\]"'\\`]/u.test(value)) {
-      throw new Error();
-    }
-    parsed = new URL(value);
-  } catch {
-    problems.push(`${label} must be a full URL including https://.`);
-    return null;
-  }
-
-  if (!/^https?:\/\//i.test(value) || !["https:", "http:"].includes(parsed.protocol)) {
-    problems.push(`${label} must use http or https with a full URL.`);
-    return null;
-  }
-
-  if (parsed.username || parsed.password) {
-    problems.push(`${label} must not contain URL credentials.`);
-    return null;
-  }
-
-  return value;
-}
-
-function parseEnabledCommands(value, problems) {
+function parseEnabledCommands(value, names, problems) {
   if (isBlank(value)) {
-    return new Set(COMMAND_NAMES);
+    return new Set(names);
   }
 
   const requested = value
@@ -103,13 +63,13 @@ function parseEnabledCommands(value, problems) {
     .map((name) => name.trim().toLowerCase())
     .filter(Boolean);
 
-  const unknown = requested.filter((name) => !COMMAND_NAMES.includes(name));
+  const unknown = requested.filter((name) => !names.includes(name));
   if (unknown.length > 0) {
     problems.push(
       "ENABLED_COMMANDS contains an unknown command. " +
-        `Valid names are: ${COMMAND_NAMES.join(", ")}.`
+        "Use built-in names or names defined in config.json customCommands."
     );
-    return new Set(COMMAND_NAMES);
+    return new Set(names);
   }
 
   return new Set(requested);
@@ -150,12 +110,6 @@ function normalizePolicy(value, problems) {
   }
 
   return lines.map((line) => line.trim()).filter((line) => line.length > 0);
-}
-
-function renderTemplate(template, variables) {
-  return String(template).replace(/\{(\w+)\}/g, (match, key) =>
-    Object.prototype.hasOwnProperty.call(variables, key) ? String(variables[key]) : match
-  );
 }
 
 /**
@@ -221,6 +175,7 @@ function loadConfig(options = {}) {
   );
 
   const footer = isBlank(env.EMBED_FOOTER) ? "" : env.EMBED_FOOTER.trim();
+  const app = { displayName, embedColor, footer };
   const paymentQrSetting = (env.PAYMENT_QR_ENABLED ?? "").trim().toLowerCase();
   if (!["", "true", "false"].includes(paymentQrSetting)) {
     problems.push("PAYMENT_QR_ENABLED must be true or false.");
@@ -329,7 +284,14 @@ function loadConfig(options = {}) {
   }
 
   // --- command selection -------------------------------------------------
-  const enabledCommands = parseEnabledCommands(env.ENABLED_COMMANDS, problems);
+  const customCommands = readCustomCommands(fileConfig.customCommands, app, problems);
+  const enabledCommands = parseEnabledCommands(env.ENABLED_COMMANDS, [...COMMAND_NAMES, ...customCommands.keys()], problems);
+  if (fileConfig.feesEnabled !== undefined && typeof fileConfig.feesEnabled !== "boolean") {
+    problems.push("config.json feesEnabled must be true or false.");
+  }
+  if (fileConfig.feesEnabled !== true) {
+    enabledCommands.delete("fees");
+  }
   const paymentMethods = new Map();
   for (const [name, address] of Object.entries(addresses)) {
     const id = { usdceth: "USDC-ETH", usdcsol: "USDC-SOL" }[name] ?? name.toUpperCase();
@@ -343,6 +305,7 @@ function loadConfig(options = {}) {
       addressLabel: "Cashtag"
     });
   }
+  addCustomPaymentMethods(paymentMethods, fileConfig.paymentMethods, problems);
   if (enabledCommands.has("pay") && paymentMethods.size === 0) {
     enabledCommands.delete("pay");
     warnings.push("/pay is disabled because no payment methods are configured.");
@@ -372,6 +335,9 @@ function loadConfig(options = {}) {
       "/vouch is disabled because neither MARKETPLACE_PROFILE_URL nor VOUCH_THREAD_URL is set."
     );
   }
+  if (enabledCommands.size > MAX_GLOBAL_COMMANDS) {
+    problems.push(`Discord allows ${MAX_GLOBAL_COMMANDS} global slash commands. Remove commands or use ENABLED_COMMANDS.`);
+  }
 
   if (problems.length > 0) {
     throw new ConfigError(problems);
@@ -379,10 +345,11 @@ function loadConfig(options = {}) {
 
   return {
     discord: { token, clientId, ownerId },
-    app: { displayName, embedColor, footer },
+    app,
     addresses,
     paymentMethods,
     paymentQrEnabled,
+    customCommands,
     cashAppTag,
     contacts,
     texts,

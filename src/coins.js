@@ -59,7 +59,7 @@ const PAYMENT_METHODS = {
 
 const PAYMENT_COMMAND_NAMES = Object.keys(PAYMENT_METHODS);
 
-const NON_PAYMENT_COMMANDS = ["cashapp", "info", "vouch", "middleman", "pay", "price", "convert", "help"];
+const NON_PAYMENT_COMMANDS = ["cashapp", "info", "vouch", "middleman", "pay", "price", "convert", "fees", "help"];
 
 const COMMAND_NAMES = [...PAYMENT_COMMAND_NAMES, ...NON_PAYMENT_COMMANDS];
 const FIAT_CURRENCIES = ["USD", "EUR", "GBP", "CAD"];

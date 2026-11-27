@@ -59,7 +59,10 @@ if (commandMap.size === 0) {
 }
 
 // Only the Guilds intent is needed: every response is an interaction reply.
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds],
+  allowedMentions: { parse: [] }
+});
 
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}.`);

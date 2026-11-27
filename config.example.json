@@ -5,5 +5,8 @@
     "Always verify who you are dealing with before sending funds."
   ],
   "vouchTemplate": "> **{amount} deal, quick and easy.**",
-  "vouchTemplateNoAmount": "> Thanks for the deal — here is where to leave a vouch."
+  "vouchTemplateNoAmount": "> Thanks for the deal — here is where to leave a vouch.",
+  "paymentMethods": [],
+  "customCommands": [],
+  "feesEnabled": false
 }

@@ -63,6 +63,7 @@ function validAddresses() {
 function createInteraction(options = {}) {
   const {
     amount = null,
+    numbers = {},
     strings = {},
     booleans = {},
     commandName = "test",
@@ -79,7 +80,7 @@ function createInteraction(options = {}) {
     commandName,
     user: { id: userId },
     options: {
-      getNumber: () => amount,
+      getNumber: (name) => name === "amount" ? amount : numbers[name] ?? null,
       getString: (name) => strings[name] ?? null,
       getBoolean: (name) => booleans[name] ?? null
     },

@@ -36,7 +36,7 @@ function describeEmbed(config, spec = {}) {
 
 function buildEmbed(config, spec) {
   const described = describeEmbed(config, spec);
-  const embed = new EmbedBuilder().setColor(config.app.embedColor);
+  const embed = new EmbedBuilder().setColor(spec.color ?? config.app.embedColor);
 
   if (described.title) {
     embed.setTitle(described.title);

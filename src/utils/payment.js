@@ -1,6 +1,6 @@
 "use strict";
 
-const { MessageFlags } = require("discord.js");
+const { escapeMarkdown, MessageFlags } = require("discord.js");
 
 const { FIAT_CURRENCIES, PAYMENT_METHODS } = require("../coins");
 const { buildEmbed: renderEmbed, describeEmbed } = require("./embeds");
@@ -56,7 +56,7 @@ function isValidAmount(value) {
 function describePayment({
   commandName, method, address, amountUsd, fiat = "USD", price, retrievedAt, rateError, includeQr
 }) {
-  const spec = { title: method.title, fields: [] };
+  const spec = { title: escapeMarkdown(method.title), fields: [] };
 
   if (typeof amountUsd === "number") {
     const requested = new Intl.NumberFormat("en-US", {
@@ -83,8 +83,17 @@ function describePayment({
 
   spec.fields.push(
     { name: method.addressLabel ?? "Address", value: `\`\`\`text\n${address}\n\`\`\`` },
-    { name: "Network", value: method.network }
+    { name: "Network", value: escapeMarkdown(method.network) }
   );
+  if (method.symbol) {
+    spec.fields.push({ name: "Currency", value: method.symbol });
+  }
+  if (method.addressValidated === false) {
+    spec.fields.push({ name: "Manual verification", value: "Compare this identifier with the recipient’s details before sending." });
+  }
+  if (method.instructions) {
+    spec.fields.push({ name: "Payment instructions", value: method.instructions });
+  }
   if (includeQr) {
     spec.image = `attachment://${QR_FILENAME}`;
   }

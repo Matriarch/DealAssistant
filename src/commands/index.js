@@ -2,6 +2,7 @@
 
 const { COMMAND_NAMES } = require("../coins");
 const { createPriceCommand, createConvertCommand } = require("./exchange");
+const { createCustomCommand } = require("./custom");
 
 const factories = {
   btc: require("./btc"),
@@ -17,6 +18,7 @@ const factories = {
   pay: require("./pay"),
   price: createPriceCommand,
   convert: createConvertCommand,
+  fees: require("./fees"),
   help: require("./help")
 };
 
@@ -35,6 +37,12 @@ function createCommands(config, deps = {}) {
     }
 
     built.push(factories[name](config, deps));
+  }
+
+  for (const command of config.customCommands.values()) {
+    if (config.isEnabled(command.name)) {
+      built.push(createCustomCommand(config, command));
+    }
   }
 
   if (config.isEnabled("help")) {

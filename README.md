@@ -13,25 +13,17 @@ confirm a payment.
 
 ## Commands
 
-| Command | Description |
-| --- | --- |
-| `/pay currency:BTC [amount] [qr]` | Share details for one of your configured payment methods |
-| `/price currency:BTC [fiat]` | Check a cryptocurrency price privately |
-| `/convert amount:200 from:USD to:BTC` | Estimate a fiat-to-crypto or crypto-to-fiat conversion privately |
-| `/btc [amount]` | Bitcoin address, optionally converted from a USD amount |
-| `/ltc [amount]` | Litecoin address, optionally converted |
-| `/eth [amount]` | Ethereum address, optionally converted |
-| `/sol [amount]` | Solana address, optionally converted |
-| `/usdceth [amount]` | USDC on Ethereum address |
-| `/usdcsol [amount]` | USDC on Solana address |
-| `/cashapp` | Cash App tag |
-| `/info` | Your name and contact links |
-| `/vouch [amount]` | Vouch prompt with your marketplace profile and thread |
-| `/middleman` | Your middleman policy |
-| `/help` | Lists the commands that are currently enabled |
+- `/pay currency:BTC` shares receiving details for a configured method.
+- `/btc`, `/ltc`, `/eth`, `/sol`, `/usdceth`, and `/usdcsol` are payment
+  shortcuts with an optional USD amount. `/cashapp` shows your cashtag.
+- `/price currency:BTC fiat:CAD` and `/convert amount:200 from:USD to:BTC`
+  show private exchange-rate estimates.
+- `/info`, `/vouch`, and `/middleman` share your configured deal information.
+  `/help` lists the commands currently enabled.
+- With `feesEnabled` set to `true`, use `/fees amount:200 percent:2.50` or
+  `/fees amount:200 fixed:3 fiat:CAD` to calculate the fee and net amount privately.
 
-Payment commands are only registered when the matching address is configured, so
-nobody sees a command that cannot answer.
+Payment shortcuts require a configured receiving address or cashtag.
 
 `/pay` lists configured methods, including Cash App when set. The individual
 cryptocurrency commands remain available as shortcuts. Set
@@ -93,12 +85,8 @@ against `DISCORD_OWNER_ID` before any command logic runs, including buttons,
 modals and autocomplete. Someone else may be able to install the app, but they
 cannot use it. Keep the install link private anyway.
 
-Servers also have a **Use External Apps** permission. Where a server disables it,
-members cannot run user-installed applications in that server. Discord may also
-show responses to a user-installed app privately, visible only to the person who
-ran the command, when the app is not a member of that server. These are Discord
-restrictions: DealAssistant cannot bypass them, and public responses are not
-guaranteed in every conversation.
+Server roles with **Use External Apps** turned off receive replies from user-installed
+apps privately. Visibility can vary by conversation and permissions. [Discord’s guide to apps](https://support.discord.com/hc/en-us/articles/21334461140375-Using-Apps-on-Discord)
 
 ## Configuration
 
@@ -123,6 +111,7 @@ than failing later in Discord.
 | `EMBED_FOOTER` | no | Footer text added to every embed |
 | `BTC_ADDRESS`, `LTC_ADDRESS`, `ETH_ADDRESS`, `SOL_ADDRESS`, `USDC_ETH_ADDRESS`, `USDC_SOL_ADDRESS` | no | Public receiving addresses; a payment command only appears when its address is set |
 | `CASHAPP_TAG` | no | Cash App tag; enables `/cashapp` |
+| `PAYMENT_QR_ENABLED` | no | Set to `true` to offer `qr:true` on supported methods |
 | `TELEGRAM_URL`, `WEBSITE_URL`, `EMAIL_ADDRESS`, `MARKETPLACE_PROFILE_URL`, `VOUCH_THREAD_URL` | no | Contact links; unset links are omitted from `/info` |
 | `ENABLED_COMMANDS` | no | Comma-separated allowlist, for example `btc,info,help`. Blank enables everything that is configured |
 
@@ -153,7 +142,7 @@ Solana are different networks with different addresses.
 
 ### `config.json`
 
-Optional. Copy the example if you want to change the longer text:
+Copy the optional example to customize text, payment methods, or commands.
 
 ```bash
 cp config.example.json config.json
@@ -173,10 +162,72 @@ the defaults shown in `config.example.json`. `config.json` is git-ignored becaus
 it holds personal text. Text is measured against Discord's embed limits after
 substitution, so an oversized message is reported at startup.
 
+#### Add a payment method
+
+The `paymentMethods` array adds choices to `/pay`. Fill in your own public
+recipient details. This example uses a fictional service and identifier.
+
+```json
+{
+  "paymentMethods": [
+    {
+      "id": "EXAMPLE-PAY",
+      "displayName": "Example payment service",
+      "symbol": "USD",
+      "network": "Example service",
+      "recipient": "ExampleRecipient",
+      "instructions": "Include the invoice reference."
+    }
+  ]
+}
+```
+
+Methods like this show the identifier exactly as configured and ask the reader
+to verify it manually. For a blockchain address, set `addressFormat` to
+`btc`, `ltc`, `eth`, or `sol` to check its format. Add `qr: true` to allow
+address QR codes when `PAYMENT_QR_ENABLED` is also true.
+
+Conversion requires a matching asset, network, and `addressFormat`. For example,
+an ETH entry uses `symbol: "ETH"`, `network: "Ethereum"`, `addressFormat: "eth"`,
+and `priceId: "ethereum"`. The other pairs use the network names in the address
+table and CoinGecko IDs `bitcoin`, `litecoin`, `solana`, or `usd-coin`. For USDC,
+use `Ethereum (ERC-20)` with `eth` or `Solana (SPL)` with `sol`. Optional
+`decimals` can reduce the precision shown in estimates. Discord allows 25
+`/pay` choices, including configured built-in methods.
+
+#### Add a custom command
+
+Add entries to `customCommands` for commands such as `/terms`, `/links`,
+or `/rules`. Each needs a unique lowercase command name, a Discord description,
+and embed content.
+
+```json
+{
+  "customCommands": [
+    {
+      "name": "rules",
+      "description": "Share the trade rules.",
+      "title": "{displayName} trade rules",
+      "body": "**Deal reference** {reference}",
+      "fields": [{ "name": "Before payment", "value": "Confirm the network." }],
+      "links": [{ "label": "Full rules", "url": "https://example.invalid/rules" }],
+      "options": [{ "name": "reference", "description": "Deal reference", "maxLength": 24 }]
+    }
+  ]
+}
+```
+
+Embed content can include an optional `color` and `footer`. Templates in titles,
+bodies, fields, and footers accept `{displayName}` and the names of up to five
+optional plain-text parameters. An omitted parameter displays an em dash. Links
+use full HTTP or HTTPS URLs. If you use `ENABLED_COMMANDS`, include the custom
+command names you want to register. Discord allows 100 enabled slash commands per
+application.
+
 ## Installation and startup
 
 ```bash
-npm install
+npm ci
 # copy .env.example to .env and fill it in
 npm run register          # once, and again whenever commands change
 npm start
@@ -185,7 +236,8 @@ npm start
 `register` and `start` are different steps:
 
 - `register` uploads the slash command definitions to Discord. Run it once after
-  configuring, and again after changing commands, options or enabled addresses.
+  configuring, and again after changing command names, options, or the list of
+  configured payment methods.
 - `start` connects the application to Discord and answers commands. It must keep
   running.
 
@@ -288,9 +340,8 @@ excludes it. The startup log lists disabled commands with the reason.
 **A command replies that it is unavailable.** The registered command no longer
 exists in this configuration. Re-run `npm run register`.
 
-**Commands work in a DM but not in a server.** The server may disable **Use
-External Apps**, or the app may not be permitted to post there. Responses can be
-private in that case; this is a Discord restriction.
+**Replies only appear to you in a server.** Check whether your role can use
+external apps publicly in that channel.
 
 **The rate shows as unavailable.** CoinGecko was unreachable or rate limited. The
 address is still returned. Requests are not retried to avoid worsening a rate
@@ -316,4 +367,6 @@ application and token.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). Address encoding uses [@scure/base](https://github.com/paulmillr/scure-base)
+and [js-sha3](https://github.com/emn178/js-sha3). Address QR images use
+[qr](https://github.com/paulmillr/qr), available under MIT or Apache-2.0.
