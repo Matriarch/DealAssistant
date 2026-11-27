@@ -2,6 +2,9 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 const { parseGIF, decompressFrames } = require("gifuct-js");
 const { loadConfig } = require("../src/config");
 const { createCommands } = require("../src/commands");
@@ -11,8 +14,10 @@ const { createInteraction, validAddresses } = require("./helpers");
 const OWNER = "987654321098765432";
 const ADDRESSES = validAddresses();
 
-function build(overrides, deps) {
-  const config = loadConfig({ env: {
+function build(t, overrides, deps) {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "dealassistant-pay-"));
+  t.after(() => fs.rmSync(cwd, { recursive: true, force: true }));
+  const config = loadConfig({ cwd, env: {
     DISCORD_TOKEN: "mock-token",
     DISCORD_CLIENT_ID: "1".repeat(18),
     DISCORD_OWNER_ID: OWNER,
@@ -21,17 +26,17 @@ function build(overrides, deps) {
   return new Map(createCommands(config, deps).map((command) => [command.data.name, command]));
 }
 
-test("/pay is registered only with configured methods and lists distinct networks", () => {
-  assert.equal(build({}).has("pay"), false);
-  const commands = build({ BTC_ADDRESS: ADDRESSES.BTC_ADDRESS, USDC_SOL_ADDRESS: ADDRESSES.USDC_SOL_ADDRESS });
+test("/pay is registered only with configured methods and lists distinct networks", (t) => {
+  assert.equal(build(t, {}).has("pay"), false);
+  const commands = build(t, { BTC_ADDRESS: ADDRESSES.BTC_ADDRESS, USDC_SOL_ADDRESS: ADDRESSES.USDC_SOL_ADDRESS });
   const [currency, ...options] = commands.get("pay").data.toJSON().options;
   assert.deepEqual(currency.choices.map(({ value }) => value), ["BTC", "USDC-SOL"]);
   assert.equal(currency.required, true);
   assert.deepEqual(options.map(({ name }) => name), ["amount", "fiat"]);
 });
 
-test("obsolete method selections and unsupported amount or QR options are rejected", async () => {
-  const commands = build({ CASHAPP_TAG: "exampletag", PAYMENT_QR_ENABLED: "true" });
+test("obsolete method selections and unsupported amount or QR options are rejected", async (t) => {
+  const commands = build(t, { CASHAPP_TAG: "exampletag", PAYMENT_QR_ENABLED: "true" });
   const command = commands.get("pay");
   assert.deepEqual(command.data.toJSON().options.map(({ name }) => name), ["currency"]);
 
@@ -46,19 +51,19 @@ test("obsolete method selections and unsupported amount or QR options are reject
   }
 });
 
-test("the payment hint uses the selected method instead of an unconfigured currency", async () => {
-  const command = build({ LTC_ADDRESS: ADDRESSES.LTC_ADDRESS }).get("pay");
+test("the payment hint uses the selected method instead of an unconfigured currency", async (t) => {
+  const command = build(t, { LTC_ADDRESS: ADDRESSES.LTC_ADDRESS }).get("pay");
   const interaction = createInteraction({ strings: { currency: "LTC" } });
   await command.execute(interaction);
   assert.match(interaction.calls[0].payload.embeds[0].toJSON().description, /currency:LTC/);
 });
 
-test("the unified payment attachment decodes to the exact configured address without an amount", async () => {
+test("the unified payment attachment decodes to the exact configured address without an amount", async (t) => {
   const { decodeQR } = await import("qr/decode.js");
   const interaction = createInteraction({
     strings: { currency: "ETH" }, amount: 25, booleans: { qr: true }
   });
-  const commands = build({ ETH_ADDRESS: ADDRESSES.ETH_ADDRESS, PAYMENT_QR_ENABLED: "true" }, {
+  const commands = build(t, { ETH_ADDRESS: ADDRESSES.ETH_ADDRESS, PAYMENT_QR_ENABLED: "true" }, {
     priceService: { getPrice: async () => ({ rate: 2500, retrievedAt: 1000 }) }
   });
   await commands.get("pay").execute(interaction);
@@ -73,8 +78,8 @@ test("the unified payment attachment decodes to the exact configured address wit
   assert.ok(embed.fields.find(({ name }) => name === "Address").value.includes(ADDRESSES.ETH_ADDRESS));
 });
 
-test("crypto shortcuts support QR opt-in and preserve plain replies by default", async () => {
-  const commands = build({ ...ADDRESSES, PAYMENT_QR_ENABLED: "true" });
+test("crypto shortcuts support QR opt-in and preserve plain replies by default", async (t) => {
+  const commands = build(t, { ...ADDRESSES, PAYMENT_QR_ENABLED: "true" });
   for (const name of ["btc", "ltc", "eth", "sol", "usdceth", "usdcsol"]) {
     const command = commands.get(name);
     assert.ok(command.data.toJSON().options.some((option) => option.name === "qr"));
@@ -85,8 +90,8 @@ test("crypto shortcuts support QR opt-in and preserve plain replies by default",
   }
 });
 
-test("central authorization rejects /pay before method selection or rate lookup", async () => {
-  const commandMap = build({ BTC_ADDRESS: ADDRESSES.BTC_ADDRESS, PAYMENT_QR_ENABLED: "true" });
+test("central authorization rejects /pay before method selection or rate lookup", async (t) => {
+  const commandMap = build(t, { BTC_ADDRESS: ADDRESSES.BTC_ADDRESS, PAYMENT_QR_ENABLED: "true" });
   const handle = createInteractionHandler({ ownerId: OWNER, commandMap });
   const interaction = createInteraction({ userId: "other", commandName: "pay" });
   interaction.options.getString = () => assert.fail("Unauthorized command execution");
