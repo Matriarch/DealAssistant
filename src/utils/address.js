@@ -47,6 +47,9 @@ function validateSegwit(address, expectedHrp, label) {
   }
 
   const version = decoded.words[0];
+  if (!Number.isInteger(version) || version > 16) {
+    return invalid("witness version must be between 0 and 16");
+  }
 
   // BIP-350: version 0 uses bech32, version 1 and above use bech32m.
   if (version === 0 && coder !== bech32) {

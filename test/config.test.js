@@ -167,6 +167,16 @@ test("malformed URLs are rejected", () => {
   assert.throws(() => load({ WEBSITE_URL: "ftp://example.com" }), /http or https/);
 });
 
+test("configuration diagnostics exclude rejected input values", () => {
+  const cwd = tempDir();
+  fs.writeFileSync(path.join(cwd, "config.json"), '{"sensitiveExample": broken}');
+  assert.throws(
+    () => loadConfig({ cwd, env: { ...BASE_ENV, ENABLED_COMMANDS: "privateMarker", WEBSITE_URL: "https://user:password@example.test" } }),
+    (error) => /could not be parsed/.test(error.message) &&
+      !/sensitiveExample|privateMarker|user:password/.test(error.message)
+  );
+});
+
 test("config.json overrides long form text", () => {
   const cwd = tempDir();
   fs.writeFileSync(

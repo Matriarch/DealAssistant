@@ -98,3 +98,9 @@ test("validateAddress rejects non-string input", () => {
   assert.equal(validateAddress("btc", undefined).valid, false);
   assert.equal(validateAddress("btc", 12345).valid, false);
 });
+
+test("SegWit rejects witness versions above 16", () => {
+  assert.equal(validateAddress("btc", segwitAddress("bc", 17)).valid, false);
+  assert.equal(validateAddress("ltc", segwitAddress("ltc", 17)).valid, false);
+  assert.equal(validateAddress("btc", segwitAddress("bc", 16)).valid, true);
+});

@@ -77,9 +77,8 @@ function checkEmbedLimits(described, label) {
   }
 
   for (const field of fields) {
-    const name = String(field.name).slice(0, 32);
-    check(`field "${name}" name`, field.name, LIMITS.fieldName);
-    check(`field "${name}" value`, field.value, LIMITS.fieldValue);
+    check("field name", field.name, LIMITS.fieldName);
+    check("field value", field.value, LIMITS.fieldValue);
   }
 
   const total =

@@ -1,6 +1,7 @@
 "use strict";
 
 const { MessageFlags } = require("discord.js");
+const { redactError } = require("./utils/logger");
 
 const DENIED_MESSAGE = "This application is private. Only its configured owner can run its commands.";
 
@@ -43,7 +44,7 @@ async function denyInteraction(interaction) {
     }
   } catch (error) {
     // Never let a failed denial crash the process.
-    console.error(`[auth] failed to reject interaction: ${error.message}`);
+    console.error(`[auth] failed to reject interaction: ${redactError(error).message}`);
   }
 }
 

@@ -71,14 +71,22 @@ function parseUrl(value, problems, label) {
   let parsed;
 
   try {
+    if (/[\s<>()[\]"'\\`]/u.test(value)) {
+      throw new Error();
+    }
     parsed = new URL(value);
   } catch {
     problems.push(`${label} must be a full URL including https://.`);
     return null;
   }
 
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    problems.push(`${label} must use http or https.`);
+  if (!/^https?:\/\//i.test(value) || !["https:", "http:"].includes(parsed.protocol)) {
+    problems.push(`${label} must use http or https with a full URL.`);
+    return null;
+  }
+
+  if (parsed.username || parsed.password) {
+    problems.push(`${label} must not contain URL credentials.`);
     return null;
   }
 
@@ -98,7 +106,7 @@ function parseEnabledCommands(value, problems) {
   const unknown = requested.filter((name) => !COMMAND_NAMES.includes(name));
   if (unknown.length > 0) {
     problems.push(
-      `ENABLED_COMMANDS contains unknown command(s): ${unknown.join(", ")}. ` +
+      "ENABLED_COMMANDS contains an unknown command. " +
         `Valid names are: ${COMMAND_NAMES.join(", ")}.`
     );
     return new Set(COMMAND_NAMES);
@@ -116,8 +124,8 @@ function readTextConfig(configPath, problems) {
 
   try {
     parsed = JSON.parse(fs.readFileSync(configPath, "utf8"));
-  } catch (error) {
-    problems.push(`config.json could not be parsed: ${error.message}`);
+  } catch {
+    problems.push("config.json could not be parsed. Check its JSON syntax and file permissions.");
     return {};
   }
 
@@ -278,7 +286,7 @@ function loadConfig(options = {}) {
   if (contacts.vouchThreadUrl) {
     parseUrl(contacts.vouchThreadUrl, problems, "VOUCH_THREAD_URL");
   }
-  if (contacts.email && !EMAIL_RE.test(contacts.email)) {
+  if (contacts.email && (!EMAIL_RE.test(contacts.email) || /[<>`()[\]"'\\]/u.test(contacts.email))) {
     problems.push("EMAIL_ADDRESS must look like name@example.com.");
   }
 
@@ -286,8 +294,8 @@ function loadConfig(options = {}) {
   let cashAppTag = isBlank(env.CASHAPP_TAG) ? "" : env.CASHAPP_TAG.trim();
 
   if (cashAppTag) {
-    if (/\s/.test(cashAppTag)) {
-      problems.push("CASHAPP_TAG must not contain spaces.");
+    if (!/^\$?[a-z0-9]+$/i.test(cashAppTag)) {
+      problems.push("CASHAPP_TAG must contain only letters and numbers after the optional dollar sign.");
     } else if (!cashAppTag.startsWith("$")) {
       cashAppTag = `$${cashAppTag}`;
     }

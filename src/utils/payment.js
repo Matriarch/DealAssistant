@@ -5,6 +5,7 @@ const { MessageFlags } = require("discord.js");
 const { PAYMENT_METHODS } = require("../coins");
 const { buildEmbed: renderEmbed, describeEmbed } = require("./embeds");
 const { defineCommand } = require("./command");
+const { redactError } = require("./logger");
 
 const MIN_AMOUNT_USD = 1;
 const MAX_AMOUNT_USD = 1_000_000;
@@ -259,7 +260,7 @@ function createPaymentCommand(commandName, config, deps = {}) {
         price = await priceService.getUsdPrice(method.priceId);
       } catch (error) {
         priceUnavailable = true;
-        console.warn(`[price] ${method.symbol}: ${error.message}`);
+        console.warn(`[price] ${method.symbol}: ${redactError(error).message}`);
       }
     }
 
