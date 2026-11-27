@@ -9,7 +9,7 @@ const { redactError } = require("./logger");
 const { createAddressQr, QR_FILENAME } = require("./qr");
 const { replyEphemeral } = require("./replies");
 const {
-  defaultPriceService, formatRate, formatRetrievedAt, unavailableRateMessage
+  defaultPriceService, formatNumber, formatRate, formatRetrievedAt, unavailableRateMessage
 } = require("./prices");
 
 const MIN_AMOUNT_USD = 1;
@@ -41,7 +41,7 @@ function formatCrypto(value, decimals) {
     return `< ${(10 ** -decimals).toFixed(decimals)}`;
   }
 
-  return new Intl.NumberFormat("en-US", { useGrouping: false, maximumFractionDigits: decimals }).format(value);
+  return formatNumber(value, decimals);
 }
 
 function isValidAmount(value) {
@@ -56,16 +56,19 @@ function isValidAmount(value) {
 function describePayment({
   commandName, methodId, method, address, amountUsd, fiat = "USD", price, retrievedAt, rateError, includeQr
 }) {
-  const spec = { title: escapeMarkdown(method.title), fields: [] };
+  const spec = {
+    title: escapeMarkdown(method.paymentTitle ?? method.title),
+    fields: [
+      { name: "Network", value: escapeMarkdown(method.network) },
+      { name: method.addressLabel ?? "Address", value: `\`\`\`text\n${address}\n\`\`\`` }
+    ]
+  };
 
   if (typeof amountUsd === "number") {
-    const requested = new Intl.NumberFormat("en-US", {
-      style: "currency", currency: fiat, maximumFractionDigits: 20, minimumFractionDigits: 0
-    }).format(amountUsd);
     const converted = formatCrypto(amountUsd / price, method.decimals);
-    const lines = [`Requested: **${requested} (${fiat})**`];
+    const lines = [`Requested: **${formatNumber(amountUsd, 20)} ${fiat}**`];
     if (converted) {
-      lines.push(`Approximate: **${converted} ${method.symbol}**`, "_Estimate only._");
+      lines.push(`Estimated payment: **${converted} ${method.symbol}**`);
       const rateLines = [formatRate(method.symbol, fiat, price)];
       if (retrievedAt !== undefined) {
         rateLines.push(`Retrieved ${formatRetrievedAt(retrievedAt)}`);
@@ -81,13 +84,6 @@ function describePayment({
     spec.description = `_Add \`amount\` to convert from USD, e.g. \`${example}\`._`;
   }
 
-  spec.fields.push(
-    { name: method.addressLabel ?? "Address", value: `\`\`\`text\n${address}\n\`\`\`` },
-    { name: "Network", value: escapeMarkdown(method.network) }
-  );
-  if (method.symbol) {
-    spec.fields.push({ name: "Currency", value: method.symbol });
-  }
   if (method.addressValidated === false) {
     spec.fields.push({ name: "Manual verification", value: "Compare this identifier with the recipient’s details before sending." });
   }

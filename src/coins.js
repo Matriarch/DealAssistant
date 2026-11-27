@@ -42,6 +42,7 @@ const PAYMENT_METHODS = {
   usdceth: {
     symbol: "USDC",
     title: "USDC on Ethereum",
+    paymentTitle: "USDC",
     network: "Ethereum (ERC-20)",
     envKey: "USDC_ETH_ADDRESS",
     decimals: 6,
@@ -50,6 +51,7 @@ const PAYMENT_METHODS = {
   usdcsol: {
     symbol: "USDC",
     title: "USDC on Solana",
+    paymentTitle: "USDC",
     network: "Solana (SPL)",
     envKey: "USDC_SOL_ADDRESS",
     decimals: 6,

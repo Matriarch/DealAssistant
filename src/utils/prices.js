@@ -106,8 +106,20 @@ function createPriceService(options = {}) {
 }
 
 function formatRate(symbol, fiat, rate) {
-  const value = new Intl.NumberFormat("en-US", { maximumSignificantDigits: 8 }).format(rate);
+  let precision = 8;
+  if (rate >= 1000) {
+    precision = 2;
+  } else if (rate >= 10) {
+    precision = 4;
+  }
+  const value = rate < 0.00000001
+    ? rate.toExponential(3)
+    : formatNumber(rate, precision);
   return `1 ${symbol} ≈ ${value} ${fiat}`;
+}
+
+function formatNumber(value, maximumFractionDigits) {
+  return new Intl.NumberFormat("en-US", { useGrouping: "always", maximumFractionDigits }).format(value);
 }
 
 function formatRetrievedAt(retrievedAt) {
@@ -126,6 +138,7 @@ module.exports = {
   PriceLookupError,
   createPriceService,
   defaultPriceService: createPriceService(),
+  formatNumber,
   formatRate,
   formatRetrievedAt,
   unavailableRateMessage

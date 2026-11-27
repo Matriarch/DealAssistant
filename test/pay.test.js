@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { parseGIF, decompressFrames } = require("gifuct-js");
+const { PNG } = require("pngjs");
 const { loadConfig } = require("../src/config");
 const { createCommands } = require("../src/commands");
 const { createInteractionHandler } = require("../src/router");
@@ -71,11 +71,13 @@ test("the unified payment attachment decodes to the exact configured address wit
   assert.deepEqual(interaction.calls.map(({ type }) => type), ["deferReply", "editReply"]);
   const { embeds, files } = interaction.calls[1].payload;
   const embed = embeds[0].toJSON();
-  const [frame] = decompressFrames(parseGIF(files[0].attachment), true);
-  const { width, height } = frame.dims;
-  assert.equal(decodeQR({ width, height, data: frame.patch }), ADDRESSES.ETH_ADDRESS);
+  const { width, height, data } = PNG.sync.read(files[0].attachment);
+  assert.equal(files[0].name, "receiving-address.png");
+  assert.equal(decodeQR({ width, height, data }), ADDRESSES.ETH_ADDRESS);
   assert.equal(embed.image.url, `attachment://${files[0].name}`);
   assert.ok(embed.fields.find(({ name }) => name === "Address").value.includes(ADDRESSES.ETH_ADDRESS));
+  assert.deepEqual(embed.fields.slice(0, 2).map(({ name }) => name), ["Network", "Address"]);
+  assert.ok(embed.fields.every(({ name }) => name !== "Currency"));
 });
 
 test("crypto shortcuts support QR opt-in and preserve plain replies by default", async (t) => {

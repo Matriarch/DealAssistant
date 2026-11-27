@@ -74,6 +74,7 @@ function addCustomPaymentMethods(methods, entries, problems) {
     if (problems.length === before) {
       methods.set(id, {
         title: displayName,
+        paymentTitle: `${displayName} (${symbol})`,
         symbol,
         network,
         address: recipient,

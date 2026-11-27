@@ -5,7 +5,9 @@ const { FIAT_CURRENCIES, PRICED_COINS } = require("../coins");
 const { defineCommand } = require("../utils/command");
 const { buildEmbed } = require("../utils/embeds");
 const { formatCrypto } = require("../utils/payment");
-const { defaultPriceService, formatRate, formatRetrievedAt, unavailableRateMessage } = require("../utils/prices");
+const {
+  defaultPriceService, formatNumber, formatRate, formatRetrievedAt, unavailableRateMessage
+} = require("../utils/prices");
 const { replyEphemeral } = require("../utils/replies");
 const { redactError } = require("../utils/logger");
 
@@ -88,7 +90,7 @@ function createConvertCommand(config, { priceService = defaultPriceService } = {
           if (converted === null) {
             return null;
           }
-          const input = new Intl.NumberFormat("en-US", { maximumFractionDigits: 20 }).format(amount);
+          const input = formatNumber(amount, 20);
           const relation = converted.startsWith("<") ? `→ ${converted}` : `≈ ${converted}`;
           return { title: "Conversion estimate", description: `**${input} ${from} ${relation} ${to}**` };
         }

@@ -1,43 +1,34 @@
 # DealAssistant
 
-[![Tests](https://github.com/Matriarch/DealAssistant/actions/workflows/tests.yml/badge.svg)](https://github.com/Matriarch/DealAssistant/actions/workflows/tests.yml)
-
-A small self-hosted Discord utility for sharing payment details during deals. It
-replies with your configured cryptocurrency addresses, converts a USD deal amount
-into the amount of crypto to send, and serves your contact links, vouch links and
-middleman policy as consistent embeds.
-
-It is a personal utility, not a wallet, payment processor, escrow or middleman
-service. It never asks for private keys or seed phrases, and it cannot verify or
-confirm a payment.
+DealAssistant is a self-hosted Discord app for sharing receiving addresses,
+estimating cryptocurrency payments, and showing your deal information. Install it
+on your own Discord account and use slash commands in servers, DMs, and group
+DMs where Discord allows them. DealAssistant never handles funds, stores private
+keys, or confirms payments.
 
 ## Commands
 
-- `/pay currency:BTC` shares receiving details for a configured method.
-- `/btc`, `/ltc`, `/eth`, `/sol`, `/usdceth`, and `/usdcsol` are payment
-  shortcuts with an optional USD amount. `/cashapp` shows your cashtag.
-- `/price currency:BTC fiat:CAD` and `/convert amount:200 from:USD to:BTC`
-  show private exchange-rate estimates.
-- `/info`, `/vouch`, and `/middleman` share your configured deal information.
-  `/help` lists the commands currently enabled.
-- With `feesEnabled` set to `true`, use `/fees amount:200 percent:2.50` or
-  `/fees amount:200 fixed:3 fiat:CAD` to calculate the fee and net amount privately.
+| Example | What it does |
+| --- | --- |
+| `/btc amount:200` | Share the Bitcoin address and estimate a 200 USD payment |
+| `/pay currency:BTC amount:200 fiat:EUR qr:true` | Estimate a 200 EUR payment and attach a PNG QR code for the address |
+| `/price currency:USDC fiat:CAD` | Show the USDC market price in CAD privately |
+| `/convert amount:0.5 from:ETH to:USD` | Estimate the USD value of 0.5 ETH privately |
+| `/fees amount:200 percent:2.50` | Show the percentage fee and net amount privately |
+| `/fees amount:200 fixed:3 fiat:CAD` | Deduct a 3 CAD fixed fee privately |
 
-Payment shortcuts require a configured receiving address or cashtag.
+The payment shortcuts also include `/ltc`, `/eth`, `/sol`, `/usdceth`, `/usdcsol`,
+and `/cashapp`. `/help` groups enabled commands by category, including your custom
+commands. Enable `/fees` with `"feesEnabled": true` in `config.json`.
 
-`/pay` lists configured methods, including Cash App when set. The individual
-cryptocurrency commands remain available as shortcuts. Set
-`PAYMENT_QR_ENABLED=true` and rerun registration to add the optional `qr:true`
-argument to cryptocurrency payments. The image is generated locally and encodes
-the same address shown in the response. Amounts stay outside the QR code.
+`/pay` only lists configured methods. Set `PAYMENT_QR_ENABLED=true` and rerun
+registration to offer `qr:true`. The PNG is generated locally and contains only
+the address, which remains selectable in the response.
 
-The payment shortcuts take amounts in USD. `/pay currency:BTC amount:200 fiat:EUR`
-estimates the payment for a EUR deal. `/pay`, `/price` and `/convert` support USD,
-EUR, GBP and CAD. For example, `/convert amount:0.5 from:ETH to:USD` estimates the
-USD value of 0.5 ETH. Rates include USDC market prices from CoinGecko and show
-when the app retrieved them. The app caches rates for 60 seconds and shares
-concurrent lookups for the same asset. Payment responses still show the address
-when a lookup fails. Market estimates can change before payment.
+Crypto shortcuts use USD. `/pay`, `/price`, and `/convert` support USD, EUR, GBP,
+and CAD. CoinGecko rates include USDC market prices. The app caches rates for 60
+seconds and shows when it retrieved them. If a rate lookup fails, payment
+responses still show the address.
 
 ## Requirements
 
@@ -47,43 +38,39 @@ when a lookup fails. Market estimates can change before payment.
 
 ## Discord application setup
 
-1. Open <https://discord.com/developers/applications> and click **New Application**.
-2. Give it a name (for example `Deal Assistant`) and set a profile picture on the
-   **General Information** page.
-3. On **General Information**, copy the **Application ID**. This becomes
-   `DISCORD_CLIENT_ID`.
-4. Open the **Bot** page, click **Reset Token**, and copy the token once. This
-   becomes `DISCORD_TOKEN`. Treat it like a password.
-5. Open the **Installation** page. Under **Installation Contexts**, enable
-   **User Install** and save. Guild Install is optional — this app never needs to
-   join a server, so leaving it off reduces the surface area.
-6. Under **Install Link**, choose **Discord Provided Link**. The default install
-   settings do not appear until a link type is selected.
-7. Under **Default Install Settings**, add the `applications.commands` scope for
-   **User Install**. Do not add the `bot` scope and do not grant Administrator or
-   any other permissions — none are needed.
-8. Copy the install link, open it in your browser, and choose **Add to my apps**.
-   This installs the application on your own Discord account, which is what lets
-   the commands work in servers and DMs without inviting a bot to every server.
-9. In Discord, open **User Settings -> Advanced** and enable **Developer Mode**.
-10. Right-click your own avatar and choose **Copy User ID**. This becomes
-    `DISCORD_OWNER_ID`.
-11. Register the commands, start the app, and run `/info` in a server or in a DM
-    with the app.
-
-`DISCORD_OWNER_ID` is a security setting, not a personalisation field. It decides
-who may run the commands. It is not the same number as the Application ID.
+1. Create a personal application in the [Discord Developer Portal](https://discord.com/developers/applications).
+   Copy its **Application ID** to `DISCORD_CLIENT_ID`.
+2. Copy the token from the **Bot** page to `DISCORD_TOKEN`. Under **Installation**,
+   enable **User Install** and leave **Guild Install** off. The application needs
+   the `applications.commands` scope. [Discord setup guide](https://docs.discord.com/developers/quick-start/getting-started)
+3. In Discord, enable **Developer Mode** under **User Settings → Advanced**.
+   Copy your own **User ID** to `DISCORD_OWNER_ID`. That is the only account
+   that can execute commands.
 
 ### Installation restrictions
 
-Disabling **Public Bot** on the Bot page only stops other people from adding your
-bot user to their servers. It does not prevent someone from installing a
-user-install app to their own account, because the install link is public.
+To match the private setup tested for this project, set **Installation → Install
+Link → None**, then turn off **Bot → Public Bot**. Leave **Requires OAuth2 Code
+Grant** off for this installation flow. Discord documents that **None** hides
+the Add App entry point and **Public Bot** controls who can add an app to guilds.
+Its support article also describes the requirements for switching an existing
+public app to private. [Discord application settings](https://docs.discord.com/developers/resources/application#install-links) ·
+[Discord developer support](https://support-dev.discord.com/hc/en-us/articles/21204493235991-How-Can-Users-Discover-and-Play-My-Activity)
 
-DealAssistant therefore enforces ownership in code: every interaction is checked
-against `DISCORD_OWNER_ID` before any command logic runs, including buttons,
-modals and autocomplete. Someone else may be able to install the app, but they
-cannot use it. Keep the install link private anyway.
+From the owner account, open this direct authorization URL with your own
+application ID and approve the user install. `integration_type=1` selects User
+Install. [Discord OAuth2 documentation](https://docs.discord.com/developers/topics/oauth2)
+
+```text
+https://discord.com/oauth2/authorize?client_id=YOUR_APPLICATION_ID&scope=applications.commands&integration_type=1
+```
+
+A second account was denied installation of the individually owned app used
+for live testing. Discord's API reported **Public Bot** off, User Install as the
+only context, `applications.commands` as its scope, and no custom install URL.
+The test verified that app's behavior. Check your own install route with a
+second account. Independently, DealAssistant checks `DISCORD_OWNER_ID` before
+processing every interaction.
 
 Server roles with **Use External Apps** turned off receive replies from user-installed
 apps privately. Visibility can vary by conversation and permissions. [Discord’s guide to apps](https://support.discord.com/hc/en-us/articles/21334461140375-Using-Apps-on-Discord)
@@ -105,7 +92,7 @@ than failing later in Discord.
 | --- | --- | --- |
 | `DISCORD_TOKEN` | yes | Bot token from the Developer Portal |
 | `DISCORD_CLIENT_ID` | yes | Application ID |
-| `DISCORD_OWNER_ID` | yes | Your Discord user ID; the only account allowed to run commands (see step 10) |
+| `DISCORD_OWNER_ID` | yes | Your Discord user ID and the only account allowed to run commands |
 | `DISPLAY_NAME` | no | Name shown in embeds (default `Deal Assistant`) |
 | `EMBED_COLOR` | no | Accent colour as hex (default `#5865F2`) |
 | `EMBED_FOOTER` | no | Footer text added to every embed |
@@ -359,51 +346,23 @@ commas and unescaped quotes.
 npm test
 ```
 
-The suite runs offline: Discord interactions and the price API are mocked. It covers
-address validation for every supported network, deferred acknowledgements, rate
-timeouts and fallbacks, embed limits, owner-only authorisation, log redaction, and
-configuration failures. GitHub Actions runs it on Node.js 22 and 24 and audits
-production dependencies on every push and pull request.
+The suite uses mocked Discord and CoinGecko calls. It covers address validation,
+decoded PNG payloads, rate handling, embed limits, owner authorization, log
+redaction, and custom configuration. GitHub Actions runs the suite on Node.js
+22 and 24 and audits production dependencies.
 
 ### Live Discord smoke test
 
-Use a separate Discord application with its own test token and application ID.
-Enable User Install with the `applications.commands` scope, set your test
-account as `DISCORD_OWNER_ID`, and use public receiving addresses designated for
-testing. A second Discord account is needed to verify the owner check. Run
-`npm run register` followed by `npm start` with that configuration.
-
-1. Use the owner account to try a payment shortcut and `/pay` in a server, a
-   direct message, and a group DM. Check which replies other participants can see.
-2. Select each configured method and verify that the address matches its settings.
-   Request `qr:true`, scan the image, and compare the scanned address with the
-   selectable text. This check requires no transfers.
-3. Try an amount on a payment command, a USDC price, and a conversion in each
-   direction. Check that the displayed rate and retrieval time accompany the estimate.
-4. Register a custom command and try it with and without a parameter. From the
-   second account, try a payment, a rate command, and the custom command. Verify
-   that all three receive only the private denial.
-
-### Release archives
-
-Run the tests, production dependency audit, and secret scan before packaging a
-release. Build the archive from the tested Git commit so the download contains
-only tracked files. For a release candidate, use its version in the archive name
-and mark any GitHub release as a pre-release until the live checks above pass.
-
-```bash
-mkdir -p release
-git archive --format=zip --prefix=DealAssistant-1.1.0-rc.1/ \
-  -o release/DealAssistant-1.1.0-rc.1.zip HEAD
-cd release
-sha256sum DealAssistant-1.1.0-rc.1.zip > SHA256SUMS.txt
-```
-
-On Windows use `Get-FileHash -Algorithm SHA256` to verify the archive against the
-published checksum.
+Try a command as the owner in a test server, a DM with the app, and a group DM
+with test participants. For a payment with `qr:true`, download and scan the
+image and compare it with the selectable address. Try a custom command with an
+optional parameter and select a custom method from `/pay`. These checks require
+no transfers. With an alternate account, verify the private installation
+behavior separately from the app's automated authorization tests.
 
 ## License
 
 MIT. See [LICENSE](LICENSE). Address encoding uses [@scure/base](https://github.com/paulmillr/scure-base)
 and [js-sha3](https://github.com/emn178/js-sha3). Address QR images use
-[qr](https://github.com/paulmillr/qr), available under MIT or Apache-2.0.
+[qr](https://github.com/paulmillr/qr), available under MIT or Apache-2.0. Node.js writes
+the PNG using its built-in zlib module.

@@ -49,6 +49,7 @@ test("custom commands register as user installs and render static fields, links 
   const config = load(t, { customCommands: [rules] }, { ENABLED_COMMANDS: "rules,help" });
   const commands = createCommands(config);
   assert.deepEqual(commands.map(({ data }) => data.name), ["rules", "help"]);
+  assert.match(commands[1].describe().description, /\*\*Utilities\*\*[\s\S]*\*\*Custom commands\*\*\n\x60\/rules\x60/);
   const [command] = commands;
   const registration = command.data.toJSON();
   assert.deepEqual(registration.integration_types, [1]);
@@ -146,7 +147,8 @@ test("custom conversion and QR require supported definitions, and configured cho
   } } }).find(({ data }) => data.name === "pay");
   const interaction = createInteraction({ amount: 201, strings: { currency: "ETH-BACKUP", fiat: "GBP" } });
   await command.execute(interaction);
-  assert.match(interaction.calls[1].payload.embeds[0].toJSON().fields[0].value, /0\.1005 ETH/);
+  assert.match(interaction.calls[1].payload.embeds[0].toJSON().fields.find(({ name }) => name === "Amount").value,
+    /0\.1005 ETH/);
   assert.throws(() => load(t, { paymentMethods: [{ ...ethProfile, network: "Other" }] }), /supported asset/);
   assert.throws(() => load(t, { paymentMethods: [{ ...ethProfile, addressFormat: "btc", priceId: undefined }] }),
     /does not match the named network/);

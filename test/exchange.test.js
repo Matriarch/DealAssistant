@@ -5,10 +5,16 @@ const assert = require("node:assert/strict");
 const { setTimeout: delay } = require("node:timers/promises");
 const { createPriceCommand, createConvertCommand } = require("../src/commands/exchange");
 const { createInteractionHandler } = require("../src/router");
-const { createPriceService } = require("../src/utils/prices");
+const { createPriceService, formatRate } = require("../src/utils/prices");
 const { createInteraction } = require("./helpers");
 
 const config = { app: { embedColor: 0x5865f2 } };
+
+test("rates group thousands, preserve stablecoin deviations, and describe very small values", () => {
+  assert.equal(formatRate("BTC", "USD", 61_234.56789), "1 BTC ≈ 61,234.57 USD");
+  assert.equal(formatRate("USDC", "EUR", 0.99987654), "1 USDC ≈ 0.99987654 EUR");
+  assert.equal(formatRate("ETH", "GBP", 0.00000000012345), "1 ETH ≈ 1.234e-10 GBP");
+});
 
 test("parallel fiat lookups share one request and retain the original retrieval timestamp", async () => {
   let calls = 0;
@@ -84,7 +90,7 @@ test("convert uses the same rate in both directions and labels values below disp
   });
   for (const [amount, from, to, expected] of [
     [200, "GBP", "BTC", "200 GBP ≈ 0.004 BTC"],
-    [0.5, "BTC", "EUR", "0.5 BTC ≈ 25000 EUR"],
+    [0.5, "BTC", "EUR", "0.5 BTC ≈ 25,000 EUR"],
     [0.00000001, "CAD", "BTC", "0.00000001 CAD → < 0.00000001 BTC"]
   ]) {
     const interaction = createInteraction({ amount, strings: { from, to } });

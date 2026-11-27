@@ -185,9 +185,9 @@ test("payment embed converts an amount using the supplied rate", () => {
   }).toJSON();
 
   const amountField = embed.fields.find((field) => field.name === "Amount");
-  assert.match(amountField.value, /\$200/);
+  assert.match(amountField.value, /200 USD/);
   assert.match(amountField.value, /0\.004 BTC/);
-  assert.match(amountField.value, /Estimate only/);
+  assert.match(amountField.value, /Estimated payment/);
 });
 
 test("stablecoin embeds use the live rate rather than assuming dollar parity", () => {
