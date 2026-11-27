@@ -1,5 +1,7 @@
 # DealAssistant
 
+[![Tests](https://github.com/Matriarch/DealAssistant/actions/workflows/tests.yml/badge.svg)](https://github.com/Matriarch/DealAssistant/actions/workflows/tests.yml)
+
 A small self-hosted Discord utility for sharing payment details during deals. It
 replies with your configured cryptocurrency addresses, converts a USD deal amount
 into the amount of crypto to send, and serves your contact links, vouch links and
@@ -49,11 +51,13 @@ command still returns the address and says the live rate was unavailable.
 4. Open the **Bot** page and click **Reset Token**, then copy the token once. This
    becomes `DISCORD_TOKEN`. Do not share it or commit it anywhere.
 5. Open the **Installation** page. Under **Installation Contexts**, enable
-   **User Install** and save.
-6. Under **Default Install Settings**, add the `applications.commands` scope for
+   **User Install** and save. Guild Install is optional — this app never needs to
+   join a server, so leaving it off reduces the surface area.
+6. Under **Install Link**, choose **Discord Provided Link**. The default install
+   settings do not appear until a link type is selected.
+7. Under **Default Install Settings**, add the `applications.commands` scope for
    **User Install**. Do not add the `bot` scope and do not grant Administrator or
    any other permissions — none are needed.
-7. Leave **Install Link** set to **Discord Provided Link**.
 8. Copy the install link and open it in your browser, then choose **Add to my
    apps**. This installs the application on your own Discord account, which is
    what lets the commands work in servers and DMs without inviting a bot to every
@@ -94,7 +98,7 @@ cp .env.example .env
 | --- | --- | --- |
 | `DISCORD_TOKEN` | yes | Bot token from the Developer Portal |
 | `DISCORD_CLIENT_ID` | yes | Application ID |
-| `DISCORD_OWNER_ID` | yes | Your Discord user ID; the only account allowed to run commands |
+| `DISCORD_OWNER_ID` | yes | Your Discord user ID; the only account allowed to run commands (see step 10) |
 | `DISPLAY_NAME` | no | Name shown in embeds (default `Deal Assistant`) |
 | `EMBED_COLOR` | no | Accent colour as hex (default `#5865F2`) |
 | `EMBED_FOOTER` | no | Footer text added to every embed |
@@ -131,7 +135,8 @@ it holds personal text.
 
 ```bash
 npm install
-cp .env.example .env      # then edit .env
+# copy .env.example to .env, then edit it
+# on Windows: copy .env.example .env
 npm run register          # once, and again whenever commands change
 npm start
 ```
@@ -232,7 +237,8 @@ npm test
 ```
 
 The suite runs offline: Discord interactions and the price API are mocked, so no
-token or network access is required.
+token or network access is required. GitHub Actions runs it on Node.js 22 and 24
+for every push and pull request.
 
 ## License
 
