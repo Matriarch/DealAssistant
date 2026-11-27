@@ -1,6 +1,6 @@
 {
   "name": "deal-assistant",
-  "version": "1.1.0-rc.1",
+  "version": "1.1.0",
   "description": "Self-hosted Discord utility for sharing payment details, live cryptocurrency conversions, and customizable deal responses.",
   "license": "MIT",
   "main": "src/index.js",
