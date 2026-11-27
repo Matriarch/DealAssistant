@@ -1,0 +1,9 @@
+{
+  "infoMessage": "Hi, I'm {displayName}. Use the commands here to get my payment details, contact links, and deal information.",
+  "middlemanPolicy": [
+    "I do not middleman deals.",
+    "Always verify who you are dealing with before sending funds."
+  ],
+  "vouchTemplate": "> **{amount} deal, quick and easy.**",
+  "vouchTemplateNoAmount": "> Thanks for the deal — here is where to leave a vouch."
+}
